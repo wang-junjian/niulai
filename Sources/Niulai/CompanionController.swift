@@ -17,6 +17,7 @@ final class CompanionController: ObservableObject {
     private var timer: Timer?
     private var lastTick = Date()
     private var leaving = false
+    private var following = false
     private var reactionUntil = Date.distantPast
     private var bubbleGeneration = 0
 
@@ -115,13 +116,20 @@ final class CompanionController: ObservableObject {
 
         if now < reactionUntil {
             // 被戳的反应时间，原地不动
-        } else if abs(dx) > 3 {
-            let speed: CGFloat = abs(dx) > 300 ? 340 : 90   // 落太远就快跑追上
-            origin.x += max(-speed * dt, min(speed * dt, dx))
-            facingLeft = dx < 0
-            state = .walking
         } else {
-            state = mirroredState(from: pet.state)
+            // 迟滞：距离超过 12pt 才开始跟，小于 4pt 才停下，避免在阈值附近来回切换
+            if !following, abs(dx) > 12 { following = true }
+            if following, abs(dx) < 4 { following = false }
+
+            if following {
+                // 比例速度：离得远跑得快，接近时平滑减速到与牛来同速
+                let speed = min(340, max(30, abs(dx) * 4))
+                origin.x += dx > 0 ? min(speed * dt, dx) : max(-speed * dt, dx)
+                facingLeft = dx < 0
+                state = .walking
+            } else {
+                state = mirroredState(from: pet.state)
+            }
         }
 
         // 垂直平滑跟随（牛来被拎到别处时）
