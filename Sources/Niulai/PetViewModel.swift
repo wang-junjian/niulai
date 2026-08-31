@@ -10,10 +10,28 @@ final class PetViewModel: ObservableObject {
         case idle            // 发呆站立
         case walking         // 自由漫步
         case walkingTo(CGFloat)  // 朝某个 x 坐标走（用于提醒时走到屏幕中间）
+        case walkingToSleep(CGFloat) // 走向屏幕角落趴睡（工作模式）
         case sitting         // 坐下
         case sleeping        // 打盹
         case happy           // 开心（被戳/落地后的短暂反应）
         case dragged         // 被鼠标抓着
+    }
+
+    /// 休闲：满地漫游；工作：趴角落睡觉做梦，安静不打扰
+    enum PetMode: String, Hashable {
+        case leisure, working
+    }
+
+    /// 直接读写 UserDefaults 的计算属性，避免 @Published 在 nonisolated init 中的隔离问题
+    var mode: PetMode {
+        get {
+            PetMode(rawValue: UserDefaults.standard.string(forKey: "petMode") ?? "") ?? .leisure
+        }
+        set {
+            objectWillChange.send()
+            UserDefaults.standard.set(newValue.rawValue, forKey: "petMode")
+            reactToModeChange()
+        }
     }
 
     @Published private(set) var state: State = .idle
@@ -33,6 +51,31 @@ final class PetViewModel: ObservableObject {
     private var bubbleGeneration = 0
 
     nonisolated init() {}
+
+    // MARK: - 模式切换
+
+    private func reactToModeChange() {
+        switch mode {
+        case .working:
+            showBubble("我去做个勇敢的梦啦，你专心工作~", duration: 3)
+            settleIntoCorner()
+        case .leisure:
+            showBubble("我醒啦！梦里的我可勇敢了！", duration: 3)
+            stateUntil = Date()   // 立刻恢复自由行为
+        }
+    }
+
+    /// 工作模式的归宿：走到屏幕右下角趴睡；已经在角落就直接睡
+    private func settleIntoCorner() {
+        let cornerX = visibleFrame.maxX - (window?.frame.width ?? 240) - 30
+        let currentX = window?.frame.minX ?? cornerX
+        if abs(currentX - cornerX) > 40 {
+            state = .walkingToSleep(cornerX)
+            stateUntil = Date().addingTimeInterval(30)
+        } else {
+            setState(.sleeping, duration: 3600)
+        }
+    }
 
     // MARK: - 台词
 
@@ -57,6 +100,14 @@ final class PetViewModel: ObservableObject {
         "（梦话）哞……云雀，你也做梦吗？"
     ]
 
+    /// 工作模式下被戳：迷迷糊糊应一声
+    static let workingPokePhrases = [
+        "（迷迷糊糊）哞……我再睡会儿",
+        "（揉眼睛）唔……还没到休息时间吗？",
+        "（梦话）嗯……豹拉……哦，是你呀",
+        "（翻身）嘘……梦里正精彩呢"
+    ]
+
     static let reminderPhrases = [
         "哞！该休息一下啦，喝口水活动活动~",
         "草原的牛都知道劳逸结合，起来走走吧！",
@@ -67,13 +118,17 @@ final class PetViewModel: ObservableObject {
     // MARK: - 生命周期
 
     func start() {
-        setState(.idle, duration: 3)
         lastTick = Date()
         ticker = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             MainActor.assumeIsolated { self.tick() }
         }
         configureReminder()
+        if mode == .working {
+            settleIntoCorner()
+        } else {
+            setState(.idle, duration: 3)
+        }
     }
 
     // MARK: - 主循环
@@ -97,6 +152,13 @@ final class PetViewModel: ObservableObject {
             if abs(window.frame.minX - target) < 24 {
                 arriveAtReminderSpot()
             }
+        case .walkingToSleep(let target):
+            let dir: CGFloat = target > window.frame.minX ? 1 : -1
+            facingLeft = dir < 0
+            move(dx: walkSpeed * 1.2 * dt * dir)
+            if abs(window.frame.minX - target) < 24 {
+                setState(.sleeping, duration: 3600)
+            }
         default:
             break
         }
@@ -112,6 +174,11 @@ final class PetViewModel: ObservableObject {
     }
 
     private func pickNextState() {
+        // 工作模式：不漫游，回角落继续做梦
+        if mode == .working {
+            settleIntoCorner()
+            return
+        }
         let roaming = UserDefaults.standard.object(forKey: "roamingEnabled") as? Bool ?? true
         guard roaming else {
             setState(.sitting, duration: 60)
@@ -181,6 +248,12 @@ final class PetViewModel: ObservableObject {
     /// 点击/戳一下
     func poke() {
         guard state != .dragged else { return }
+        if mode == .working {
+            // 被吵醒一下，迷迷糊糊应一声，很快又睡回去
+            setState(.happy, duration: 0.8)
+            showBubble(Self.workingPokePhrases.randomElement() ?? "哞……", duration: 2.5)
+            return
+        }
         setState(.happy, duration: 1.4)
         showBubble(Self.pokePhrases.randomElement() ?? "哞~", duration: 2.5)
     }

@@ -8,8 +8,16 @@ struct PetContainerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SpeechBubbleView(text: viewModel.bubbleText)
-                .frame(height: 70)
+            Group {
+                if viewModel.bubbleText != nil {
+                    SpeechBubbleView(text: viewModel.bubbleText)
+                } else if viewModel.mode == .working && viewModel.state == .sleeping {
+                    DreamBubbleView()
+                        .transition(.opacity)
+                }
+            }
+            .frame(height: 70)
+            .animation(.easeInOut(duration: 0.4), value: viewModel.mode == .working && viewModel.state == .sleeping)
             NiulaiView(viewModel: viewModel)
                 .frame(width: 240, height: 230)
                 .contentShape(Rectangle())

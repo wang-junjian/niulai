@@ -271,6 +271,7 @@ struct NiulaiView: View {
 private extension PetViewModel.State {
     var isWalkingTo: Bool {
         if case .walkingTo = self { return true }
+        if case .walkingToSleep = self { return true }
         return false
     }
 }

@@ -9,6 +9,13 @@ struct MenuBarContentView: View {
     @AppStorage("baolaAlways") private var baolaAlways = false
 
     var body: some View {
+        Picker("模式", selection: $viewModel.mode) {
+            Text("休闲").tag(PetViewModel.PetMode.leisure)
+            Text("工作（梦境）").tag(PetViewModel.PetMode.working)
+        }
+
+        Divider()
+
         Button(viewModel.isVisible ? "隐藏牛来" : "显示牛来") {
             viewModel.setVisible(!viewModel.isVisible)
         }
