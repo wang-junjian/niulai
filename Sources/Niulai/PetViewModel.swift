@@ -22,6 +22,8 @@ final class PetViewModel: ObservableObject {
     @Published var isVisible = true
 
     weak var window: NSWindow?
+    weak var companion: CompanionController?
+    weak var lark: LarkController?
 
     private let walkSpeed: CGFloat = 55
     private var ticker: Timer?
@@ -39,15 +41,26 @@ final class PetViewModel: ObservableObject {
         "勇气已经在我心底了！",
         "今天也要加油呀！",
         "我才不是胆小鬼！",
-        "站起来，追上牛群！",
-        "豹拉是我的好朋友~",
+        "七天站不起来就会被抛弃……但我做到了！",
+        "豹拉才不是野兽，它是我最好的朋友！",
+        "牛二，我不怕你。",
+        "妈妈在等我，我要站起来！",
         "你戳我干嘛啦，哞！",
-        "妈妈说过，坚持就会胜利！"
+        "梦里的我，可勇敢了。"
+    ]
+
+    static let dreamPhrases = [
+        "（梦话）豹拉，别走……",
+        "（梦话）我能站起来了！",
+        "（梦话）妈妈，快跑……",
+        "（梦话）狼来了也不怕……",
+        "（梦话）哞……云雀，你也做梦吗？"
     ]
 
     static let reminderPhrases = [
         "哞！该休息一下啦，喝口水活动活动~",
         "草原的牛都知道劳逸结合，起来走走吧！",
+        "妈妈说过，坚持就会胜利——先站起来走走！",
         "休息是为了更好地出发，哞~"
     ]
 
@@ -91,6 +104,11 @@ final class PetViewModel: ObservableObject {
         if now >= stateUntil, state != .dragged {
             pickNextState()
         }
+
+        // 打盹时偶尔说梦话（平均约 20 秒一句）
+        if state == .sleeping, bubbleText == nil, Int.random(in: 0..<1200) == 0 {
+            showBubble(Self.dreamPhrases.randomElement() ?? "（梦话）哞……", duration: 3.5)
+        }
     }
 
     private func pickNextState() {
@@ -123,6 +141,9 @@ final class PetViewModel: ObservableObject {
     private func setState(_ s: State, duration: TimeInterval) {
         state = s
         stateUntil = Date().addingTimeInterval(duration)
+        // 通知豹拉：牛来出发散步 / 睡着了
+        if s == .walking { companion?.onPetStartedWalking() }
+        if s == .sleeping { companion?.onPetStartedSleeping() }
     }
 
     // MARK: - 窗口移动
@@ -195,6 +216,8 @@ final class PetViewModel: ObservableObject {
         } else {
             window?.orderOut(nil)
         }
+        companion?.setVisible(visible)
+        lark?.setVisible(visible)
     }
 
     /// “自由走动”开关变化后调用

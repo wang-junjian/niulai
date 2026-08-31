@@ -7,9 +7,12 @@
 ## 功能
 
 - **桌面漫游**：随机发呆、漫步、坐下、打盹 💤，撞到屏幕边缘会掉头
-- **拖拽**：按住拎起来放到任何地方（被拎着时会瞪大眼睛晃荡），放下时开心落地
-- **点击互动**：戳一下会跳起来，冒出电影台词气泡（「勇气已经在我心底了！」）
-- **菜单栏控制**：🐮 图标 → 显示/隐藏、自由走动开关、休息提醒间隔、退出
+- **拖拽**：按住拎起来放到任何地方（被拎着时会举起双手晃荡），放下时开心落地
+- **点击互动**：戳一下会跳起来，冒出电影台词气泡（「七天站不起来就会被抛弃……但我做到了！」）
+- **梦话彩蛋**：打盹时偶尔冒梦话气泡（「（梦话）豹拉，别走……」）
+- **豹拉客串**：黄底黑斑的小豹会在牛来散步时随机跑来跟随（30% 概率），也可以在菜单栏开启「豹拉常伴」；戳豹拉它也会回应
+- **云雀飞过**：翅膀受伤的云雀每隔几分钟慢慢飞过屏幕，有 30% 概率落在牛来头顶歇脚
+- **菜单栏控制**：🐮 图标 → 显示/隐藏、自由走动、豹拉常伴、休息提醒间隔、退出
 - **休息提醒**：定时走到屏幕中间提醒你起来活动（默认 45 分钟，可关）
 
 ## 运行
@@ -32,13 +35,17 @@ swift run Niulai
 
 ```
 Sources/Niulai/
-├── NiulaiApp.swift           # 入口 + 菜单栏（MenuBarExtra）
-├── PetWindowController.swift # 无边框透明置顶窗口
-├── PetViewModel.swift        # 行为状态机 + 提醒定时器
-├── PetContainerView.swift    # 拖拽/点击手势装配
-├── NiulaiView.swift          # Canvas 绘制小牛 + 动画参数
-├── SpeechBubbleView.swift    # 对话气泡
-└── MenuBarContentView.swift  # 菜单栏控制项
+├── NiulaiApp.swift            # 入口 + 菜单栏（MenuBarExtra）
+├── PetWindowController.swift  # 牛来的无边框透明置顶窗口
+├── PetViewModel.swift         # 牛来行为状态机 + 台词库 + 提醒定时器
+├── PetContainerView.swift     # 牛来的拖拽/点击手势装配
+├── NiulaiView.swift           # Canvas 绘制牛来（电影直立版）+ 动画参数
+├── BaolaView.swift            # Canvas 绘制豹拉
+├── CompanionController.swift  # 豹拉的跟随走位/登场离场
+├── LarkView.swift             # Canvas 绘制云雀
+├── LarkController.swift       # 云雀的飞行调度（--demo 参数可立即触发）
+├── SpeechBubbleView.swift     # 对话气泡（牛来/豹拉共用）
+└── MenuBarContentView.swift   # 菜单栏控制项
 ```
 
 ## 设计说明

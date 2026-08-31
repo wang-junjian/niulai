@@ -1,0 +1,199 @@
+import AppKit
+import SwiftUI
+
+/// 豹拉的「经纪人」：管理它的小窗、跟随牛来的走位、登场和离场。
+/// 登场方式两种——牛来出发漫步时随机客串（30%），或菜单栏「豹拉常伴」强制在线。
+@MainActor
+final class CompanionController: ObservableObject {
+
+    @Published var present = false
+    @Published var state: PetViewModel.State = .idle
+    @Published var facingLeft = false
+    @Published var bubbleText: String?
+
+    let pet: PetViewModel
+
+    private var window: NSWindow?
+    private var timer: Timer?
+    private var lastTick = Date()
+    private var leaving = false
+    private var reactionUntil = Date.distantPast
+    private var bubbleGeneration = 0
+
+    static let size = NSSize(width: 200, height: 250)
+
+    static let pokePhrases = [
+        "嗷呜~",
+        "我会保护牛来的！",
+        "牛来是我最好的朋友",
+        "我不是野兽……我是豹拉",
+        "别告诉别人我在这儿"
+    ]
+
+    nonisolated init(pet: PetViewModel) {
+        self.pet = pet
+    }
+
+    private var alwaysOn: Bool {
+        UserDefaults.standard.bool(forKey: "baolaAlways")
+    }
+
+    // MARK: - 登场/离场
+
+    func setAlways(_ on: Bool) {
+        if on { appear() } else { disappear() }
+    }
+
+    /// 牛来开始漫步时回调：30% 概率来客串
+    func onPetStartedWalking() {
+        if alwaysOn, !present { appear(); return }
+        guard !present, Double.random(in: 0..<1) < 0.3 else { return }
+        appear()
+    }
+
+    /// 牛来睡着了：非「常伴」模式下豹拉大概率悄悄离开
+    func onPetStartedSleeping() {
+        guard present, !alwaysOn, Double.random(in: 0..<1) < 0.6 else { return }
+        disappear()
+    }
+
+    func appear() {
+        guard !present else { return }
+        ensureWindow()
+        guard let window, let petWindow = pet.window else { return }
+        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+
+        // 从牛来前进方向的反侧屏幕边缘跑进来
+        let fromLeft = !pet.facingLeft
+        let startX = fromLeft ? vf.minX - Self.size.width : vf.maxX
+        window.setFrameOrigin(NSPoint(x: startX, y: petWindow.frame.minY))
+        facingLeft = !fromLeft
+        present = true
+        leaving = false
+        window.orderFrontRegardless()
+        startTimer()
+    }
+
+    func disappear() {
+        guard present, !leaving else { return }
+        leaving = true
+    }
+
+    // MARK: - 跟随主循环
+
+    private func tick() {
+        let now = Date()
+        let dt = CGFloat(now.timeIntervalSince(lastTick))
+        lastTick = now
+        guard present, let window, let petWindow = pet.window else { return }
+        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+
+        if leaving {
+            // 走向最近的屏幕边缘，走出去就消失
+            let goLeft = window.frame.midX < vf.midX
+            facingLeft = goLeft
+            state = .walking
+            var origin = window.frame.origin
+            origin.x += (goLeft ? -1 : 1) * 320 * dt
+            window.setFrameOrigin(origin)
+            if origin.x + window.frame.width < vf.minX || origin.x > vf.maxX {
+                present = false
+                leaving = false
+                window.orderOut(nil)
+                timer?.invalidate()
+                timer = nil
+            }
+            return
+        }
+
+        // 目标位：牛来身后一个身位
+        let targetX = pet.facingLeft
+            ? petWindow.frame.maxX + 6
+            : petWindow.frame.minX - Self.size.width - 6
+        var origin = window.frame.origin
+        let dx = targetX - origin.x
+
+        if now < reactionUntil {
+            // 被戳的反应时间，原地不动
+        } else if abs(dx) > 3 {
+            let speed: CGFloat = abs(dx) > 300 ? 340 : 90   // 落太远就快跑追上
+            origin.x += max(-speed * dt, min(speed * dt, dx))
+            facingLeft = dx < 0
+            state = .walking
+        } else {
+            state = mirroredState(from: pet.state)
+        }
+
+        // 垂直平滑跟随（牛来被拎到别处时）
+        origin.y += (petWindow.frame.minY - origin.y) * min(1, 6 * dt)
+        window.setFrameOrigin(origin)
+    }
+
+    private func mirroredState(from petState: PetViewModel.State) -> PetViewModel.State {
+        switch petState {
+        case .sitting: return .sitting
+        case .sleeping: return .sleeping
+        case .happy: return .happy
+        default: return .idle
+        }
+    }
+
+    // MARK: - 互动
+
+    func poke() {
+        reactionUntil = Date().addingTimeInterval(1.4)
+        state = .happy
+        showBubble(Self.pokePhrases.randomElement() ?? "嗷呜~", duration: 2.5)
+    }
+
+    private func showBubble(_ text: String, duration: TimeInterval = 3) {
+        bubbleGeneration += 1
+        let gen = bubbleGeneration
+        bubbleText = text
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.bubbleGeneration == gen else { return }
+            self.bubbleText = nil
+        }
+    }
+
+    // MARK: - 显隐（跟随牛来的显隐）
+
+    func setVisible(_ visible: Bool) {
+        if visible {
+            if present { window?.orderFrontRegardless() }
+        } else {
+            window?.orderOut(nil)
+        }
+    }
+
+    // MARK: - 窗口
+
+    private func ensureWindow() {
+        guard window == nil else { return }
+        let w = NSWindow(
+            contentRect: NSRect(origin: .zero, size: Self.size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.hasShadow = false
+        w.level = .floating
+        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        w.isReleasedWhenClosed = false
+        w.contentView = NSHostingView(rootView: BaolaContainerView(controller: self))
+        w.setContentSize(Self.size)
+        window = w
+    }
+
+    private func startTimer() {
+        lastTick = Date()
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated { self.tick() }
+        }
+    }
+}

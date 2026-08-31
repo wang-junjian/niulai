@@ -6,6 +6,7 @@ struct MenuBarContentView: View {
 
     @AppStorage("roamingEnabled") private var roamingEnabled = true
     @AppStorage("reminderMinutes") private var reminderMinutes = 45
+    @AppStorage("baolaAlways") private var baolaAlways = false
 
     var body: some View {
         Button(viewModel.isVisible ? "隐藏牛来" : "显示牛来") {
@@ -15,6 +16,11 @@ struct MenuBarContentView: View {
         Toggle("自由走动", isOn: $roamingEnabled)
             .onChange(of: roamingEnabled) {
                 viewModel.applyRoaming()
+            }
+
+        Toggle("豹拉常伴", isOn: $baolaAlways)
+            .onChange(of: baolaAlways) {
+                viewModel.companion?.setAlways(baolaAlways)
             }
 
         Picker("休息提醒", selection: $reminderMinutes) {

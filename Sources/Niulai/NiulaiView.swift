@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 用 SwiftUI Canvas 纯代码绘制的 Q 版小牛「牛来」。
-/// 侧视图：朝右行走，朝左时整体水平翻转。
+/// 用 SwiftUI Canvas 纯代码绘制的「牛来」——电影直立版形象。
+/// 正面视角：橙黄身体、标志性灰白大嘴套、细眉耷拉眼的丧萌表情。
 /// 所有动画由 TimelineView 驱动，状态机只负责切换离散状态。
 struct NiulaiView: View {
     @ObservedObject var viewModel: PetViewModel
@@ -37,16 +37,16 @@ struct NiulaiView: View {
 
     struct AnimationParams {
         let lift: CGFloat      // 整体垂直位移：走路颠簸 + 开心跳起
-        let legPhase: CGFloat  // 腿部摆动相位
+        let legPhase: CGFloat  // 四肢摆动相位
         let legSwing: CGFloat  // 腿部摆动幅度（度）
         let squashX: CGFloat
         let squashY: CGFloat
         let tilt: CGFloat      // 被拎起来时的晃动
         let blinking: Bool
-        let tailWag: CGFloat   // 尾巴摆动角度
         let eyesClosed: Bool   // 睡觉或眨眼时闭眼
         let happyMouth: Bool   // 开心时张嘴笑
         let wideEyes: Bool     // 被拎着时瞪大眼睛
+        let tailWag: CGFloat   // 尾巴摆动角度（牛来正面视角不可见，供豹拉复用）
 
         init(state: PetViewModel.State, t: TimeInterval) {
             let isWalking = state == .walking || state.isWalkingTo
@@ -55,11 +55,11 @@ struct NiulaiView: View {
             if isWalking {
                 lift = -abs(sin(t * 10)) * 4
                 legPhase = t * 10
-                legSwing = 20
+                legSwing = 22
             } else if state == .happy {
                 lift = -abs(sin(t * 9)) * 16
-                legPhase = 0
-                legSwing = 12
+                legPhase = t * 9
+                legSwing = 10
             } else {
                 lift = 0
                 legPhase = 0
@@ -71,12 +71,9 @@ struct NiulaiView: View {
             case .idle:
                 squashX = 1
                 squashY = 1 + 0.02 * sin(t * 2)
-            case .sitting:
-                squashX = 1.06
-                squashY = 0.92 + 0.015 * sin(t * 2)
-            case .sleeping:
-                squashX = 1.04
-                squashY = 0.95 + 0.02 * sin(t * 1.2)
+            case .sitting, .sleeping:
+                squashX = 1.05
+                squashY = 0.93 + 0.015 * sin(t * (state == .sleeping ? 1.2 : 2))
             default:
                 squashX = 1
                 squashY = 1
@@ -89,145 +86,169 @@ struct NiulaiView: View {
             let cycle = t.truncatingRemainder(dividingBy: 4.3)
             blinking = cycle < 0.12 && state != .sleeping && state != .dragged
 
-            // 开心/走路时尾巴摇得更欢
-            let wagSpeed = (state == .happy || isWalking) ? 6.0 : 2.2
-            let wagAmount: CGFloat = (state == .happy) ? 20 : 10
-            tailWag = sin(t * wagSpeed) * wagAmount
-
             eyesClosed = state == .sleeping || blinking
             happyMouth = state == .happy
             wideEyes = state == .dragged
+
+            // 开心/走路时尾巴摇得更欢
+            let wagSpeed = (state == .happy || isWalking) ? 6.0 : 2.2
+            let wagAmount: CGFloat = (state == .happy) ? 16 : 8
+            tailWag = sin(t * wagSpeed) * wagAmount
         }
     }
 
     // MARK: - 配色
 
     enum Palette {
-        static let body   = Color(red: 0.85, green: 0.62, blue: 0.40)
-        static let farLeg = Color(red: 0.76, green: 0.54, blue: 0.34)
-        static let cream  = Color(red: 0.96, green: 0.90, blue: 0.78)
-        static let spot   = Color(red: 0.60, green: 0.40, blue: 0.25)
-        static let dark   = Color(red: 0.28, green: 0.19, blue: 0.13)
-        static let horn   = Color(red: 0.93, green: 0.86, blue: 0.70)
-        static let blush  = Color(red: 0.95, green: 0.60, blue: 0.55)
-        static let mouth  = Color(red: 0.45, green: 0.22, blue: 0.18)
+        static let body   = Color(red: 0.90, green: 0.56, blue: 0.20)   // 牛来的橙黄
+        static let belly  = Color(red: 0.98, green: 0.90, blue: 0.72)   // 奶黄肚皮
+        static let muzzle = Color(red: 0.87, green: 0.84, blue: 0.82)   // 灰白大嘴套
+        static let dark   = Color(red: 0.32, green: 0.24, blue: 0.18)   // 蹄子/瞳孔
+        static let horn   = Color(red: 0.50, green: 0.50, blue: 0.56)   // 小灰角
+        static let blush  = Color(red: 0.95, green: 0.55, blue: 0.50)
+        static let mouth  = Color(red: 0.50, green: 0.25, blue: 0.20)
     }
 
-    // MARK: - 绘制
+    // MARK: - 绘制（正面视角，头部在上、腿在下）
 
     private func drawPet(in ctx: GraphicsContext, p: AnimationParams) {
         // 地面阴影
         ctx.fill(
-            Path(ellipseIn: CGRect(x: 60, y: 200, width: 120, height: 14)),
+            Path(ellipseIn: CGRect(x: 84, y: 202, width: 72, height: 12)),
             with: .color(.black.opacity(0.12))
         )
 
-        // 尾巴（绕根部摇摆）
-        drawRotated(in: ctx, around: CGPoint(x: 56, y: 110), degrees: p.tailWag) { c in
-            var tail = Path()
-            tail.move(to: CGPoint(x: 56, y: 110))
-            tail.addQuadCurve(to: CGPoint(x: 40, y: 158), control: CGPoint(x: 32, y: 132))
-            c.stroke(tail, with: .color(Palette.body), style: StrokeStyle(lineWidth: 5, lineCap: .round))
-            c.fill(Path(ellipseIn: CGRect(x: 33, y: 152, width: 14, height: 16)), with: .color(Palette.spot))
+        // 手臂（在身体后面）
+        drawArm(in: ctx, shoulderX: 96, restDegrees: 14,
+                swingDegrees: p.legSwing * 0.8 * sin(p.legPhase), dragged: p.wideEyes)
+        drawArm(in: ctx, shoulderX: 144, restDegrees: -14,
+                swingDegrees: -p.legSwing * 0.8 * sin(p.legPhase), dragged: p.wideEyes)
+
+        // 腿（在身体后面）
+        drawLeg(in: ctx, hipX: 106, degrees: p.legSwing * sin(p.legPhase), sitting: p.isSquashed)
+        drawLeg(in: ctx, hipX: 134, degrees: -p.legSwing * sin(p.legPhase), sitting: p.isSquashed)
+
+        // 身体与肚皮
+        ctx.fill(Path(ellipseIn: CGRect(x: 92, y: 96, width: 56, height: 76)), with: .color(Palette.body))
+        ctx.fill(Path(ellipseIn: CGRect(x: 100, y: 118, width: 40, height: 50)), with: .color(Palette.belly))
+
+        // 耳朵（在头后面一点）
+        drawRotated(in: ctx, around: CGPoint(x: 83, y: 58), degrees: 15) { c in
+            c.fill(Path(ellipseIn: CGRect(x: 74, y: 52, width: 18, height: 12)), with: .color(Palette.body))
         }
-
-        // 后腿/远侧前腿（颜色深一档，与近侧错开半步）
-        drawLeg(in: ctx, x: 88, degrees: -p.legSwing * sin(p.legPhase), color: Palette.farLeg, swing: p.legSwing)
-        drawLeg(in: ctx, x: 162, degrees: p.legSwing * sin(p.legPhase), color: Palette.farLeg, swing: p.legSwing)
-
-        // 远侧耳朵（在头后面）
-        drawRotated(in: ctx, around: CGPoint(x: 136, y: 44), degrees: 25) { c in
-            c.fill(Path(ellipseIn: CGRect(x: 122, y: 37, width: 28, height: 15)), with: .color(Palette.farLeg))
+        drawRotated(in: ctx, around: CGPoint(x: 157, y: 58), degrees: -15) { c in
+            c.fill(Path(ellipseIn: CGRect(x: 148, y: 52, width: 18, height: 12)), with: .color(Palette.body))
         }
-
-        // 身体
-        ctx.fill(Path(ellipseIn: CGRect(x: 52, y: 92, width: 136, height: 84)), with: .color(Palette.body))
-
-        // 肚皮与花斑
-        ctx.fill(Path(ellipseIn: CGRect(x: 78, y: 132, width: 88, height: 40)), with: .color(Palette.cream))
-        ctx.fill(Path(ellipseIn: CGRect(x: 64, y: 102, width: 34, height: 22)), with: .color(Palette.spot))
-        ctx.fill(Path(ellipseIn: CGRect(x: 130, y: 136, width: 26, height: 16)), with: .color(Palette.spot))
-        ctx.fill(Path(ellipseIn: CGRect(x: 100, y: 94, width: 20, height: 12)), with: .color(Palette.spot))
-
-        // 近侧的腿
-        drawLeg(in: ctx, x: 68, degrees: p.legSwing * sin(p.legPhase), color: Palette.body, swing: p.legSwing)
-        drawLeg(in: ctx, x: 144, degrees: -p.legSwing * sin(p.legPhase), color: Palette.body, swing: p.legSwing)
 
         // 头
-        ctx.fill(Path(ellipseIn: CGRect(x: 126, y: 36, width: 84, height: 84)), with: .color(Palette.body))
+        ctx.fill(Path(ellipseIn: CGRect(x: 82, y: 24, width: 76, height: 76)), with: .color(Palette.body))
 
-        // 牛角
+        // 小灰角
         var horn1 = Path()
-        horn1.move(to: CGPoint(x: 148, y: 42))
-        horn1.addQuadCurve(to: CGPoint(x: 164, y: 42), control: CGPoint(x: 156, y: 40))
-        horn1.addLine(to: CGPoint(x: 157, y: 16))
+        horn1.move(to: CGPoint(x: 94, y: 32))
+        horn1.addQuadCurve(to: CGPoint(x: 108, y: 32), control: CGPoint(x: 101, y: 30))
+        horn1.addLine(to: CGPoint(x: 100, y: 10))
         horn1.closeSubpath()
         ctx.fill(horn1, with: .color(Palette.horn))
         var horn2 = Path()
-        horn2.move(to: CGPoint(x: 180, y: 40))
-        horn2.addQuadCurve(to: CGPoint(x: 196, y: 38), control: CGPoint(x: 188, y: 37))
-        horn2.addLine(to: CGPoint(x: 189, y: 14))
+        horn2.move(to: CGPoint(x: 132, y: 32))
+        horn2.addQuadCurve(to: CGPoint(x: 146, y: 32), control: CGPoint(x: 139, y: 30))
+        horn2.addLine(to: CGPoint(x: 140, y: 10))
         horn2.closeSubpath()
         ctx.fill(horn2, with: .color(Palette.horn))
 
-        // 近侧耳朵
-        drawRotated(in: ctx, around: CGPoint(x: 200, y: 46), degrees: -25) { c in
-            c.fill(Path(ellipseIn: CGRect(x: 185, y: 38, width: 30, height: 16)), with: .color(Palette.body))
-            c.fill(Path(ellipseIn: CGRect(x: 190, y: 41, width: 20, height: 10)), with: .color(Palette.cream))
-        }
-
-        // 口鼻
-        ctx.fill(
-            Path(roundedRect: CGRect(x: 170, y: 88, width: 54, height: 38), cornerRadius: 17),
-            with: .color(Palette.cream)
-        )
-        ctx.fill(Path(ellipseIn: CGRect(x: 190, y: 100, width: 5, height: 6)), with: .color(Palette.dark))
-        ctx.fill(Path(ellipseIn: CGRect(x: 203, y: 100, width: 5, height: 6)), with: .color(Palette.dark))
-
-        // 嘴巴：开心时张着嘴笑，平时微笑
-        if p.happyMouth {
-            ctx.fill(Path(ellipseIn: CGRect(x: 192, y: 110, width: 15, height: 10)), with: .color(Palette.mouth))
-        } else {
-            var smile = Path()
-            smile.move(to: CGPoint(x: 188, y: 113))
-            smile.addQuadCurve(to: CGPoint(x: 212, y: 113), control: CGPoint(x: 200, y: 121))
-            ctx.stroke(smile, with: .color(Palette.dark), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-        }
-
-        // 眼睛：睡觉/眨眼时是闭着的弧线
+        // 眼睛（丧萌的关键：眼皮耷拉盖住眼球上半）
         if p.eyesClosed {
-            var closed = Path()
-            closed.move(to: CGPoint(x: 160, y: 64))
-            closed.addQuadCurve(to: CGPoint(x: 184, y: 64), control: CGPoint(x: 172, y: 74))
-            ctx.stroke(closed, with: .color(Palette.dark), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            for cx in [108.0, 132.0] {
+                var closed = Path()
+                closed.move(to: CGPoint(x: cx - 7, y: 56))
+                closed.addQuadCurve(to: CGPoint(x: cx + 7, y: 56), control: CGPoint(x: cx, y: 62))
+                ctx.stroke(closed, with: .color(Palette.dark), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            }
         } else {
-            ctx.fill(Path(ellipseIn: CGRect(x: 161, y: 55, width: 22, height: 22)), with: .color(.white))
-            let pupilR: CGFloat = p.wideEyes ? 7.5 : 6
-            ctx.fill(
-                Path(ellipseIn: CGRect(x: 174 - pupilR, y: 67 - pupilR, width: pupilR * 2, height: pupilR * 2)),
-                with: .color(Palette.dark)
-            )
-            ctx.fill(Path(ellipseIn: CGRect(x: 175.5, y: 61.5, width: 4.4, height: 4.4)), with: .color(.white))
+            for cx in [108.0, 132.0] {
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - 8, y: 50, width: 16, height: 13)), with: .color(.white))
+                let r: CGFloat = p.wideEyes ? 4.5 : 3.5
+                ctx.fill(
+                    Path(ellipseIn: CGRect(x: cx - r, y: 58 - r, width: r * 2, height: r * 2)),
+                    with: .color(Palette.dark)
+                )
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - 1, y: 54.5, width: 2.2, height: 2.2)), with: .color(.white))
+                if !p.wideEyes {
+                    // 耷拉的眼皮：用身体色盖住眼睛上半
+                    ctx.fill(
+                        Path(ellipseIn: CGRect(x: cx - 9, y: 43, width: 18, height: 10)),
+                        with: .color(Palette.body)
+                    )
+                }
+            }
+            // 细眉，内端上挑的八字眉（委屈/丧萌）
+            var brow1 = Path()
+            brow1.move(to: CGPoint(x: 100, y: 46))
+            brow1.addLine(to: CGPoint(x: 114, y: 42))
+            ctx.stroke(brow1, with: .color(Palette.dark), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            var brow2 = Path()
+            brow2.move(to: CGPoint(x: 126, y: 42))
+            brow2.addLine(to: CGPoint(x: 140, y: 46))
+            ctx.stroke(brow2, with: .color(Palette.dark), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
         }
 
         // 腮红
+        ctx.fill(Path(ellipseIn: CGRect(x: 94, y: 62, width: 11, height: 6)), with: .color(Palette.blush.opacity(0.4)))
+        ctx.fill(Path(ellipseIn: CGRect(x: 135, y: 62, width: 11, height: 6)), with: .color(Palette.blush.opacity(0.4)))
+
+        // 标志性大灰白嘴套
         ctx.fill(
-            Path(ellipseIn: CGRect(x: 186, y: 80, width: 15, height: 8)),
-            with: .color(Palette.blush.opacity(0.45))
+            Path(roundedRect: CGRect(x: 92, y: 66, width: 56, height: 30), cornerRadius: 14),
+            with: .color(Palette.muzzle)
         )
+        // 鼻孔
+        ctx.fill(Path(ellipseIn: CGRect(x: 107, y: 74, width: 4.5, height: 7)), with: .color(Palette.dark))
+        ctx.fill(Path(ellipseIn: CGRect(x: 128.5, y: 74, width: 4.5, height: 7)), with: .color(Palette.dark))
+
+        // 嘴巴：开心时张嘴笑，平时抿嘴
+        if p.happyMouth {
+            ctx.fill(Path(ellipseIn: CGRect(x: 113, y: 85, width: 14, height: 9)), with: .color(Palette.mouth))
+        } else {
+            var smile = Path()
+            smile.move(to: CGPoint(x: 112, y: 87))
+            smile.addQuadCurve(to: CGPoint(x: 128, y: 87), control: CGPoint(x: 120, y: 92))
+            ctx.stroke(smile, with: .color(Palette.dark), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        }
     }
 
-    /// 画一条腿，绕腿根旋转。
-    private func drawLeg(in ctx: GraphicsContext, x: CGFloat, degrees: CGFloat, color: Color, swing: CGFloat) {
-        let pivot = CGPoint(x: x + 8, y: 160)
-        drawRotated(in: ctx, around: pivot, degrees: Double(degrees)) { c in
+    /// 画一条手臂，绕肩部旋转。被拎着时双手举起来。
+    private func drawArm(in ctx: GraphicsContext, shoulderX: CGFloat, restDegrees: Double,
+                         swingDegrees: CGFloat, dragged: Bool) {
+        let pivot = CGPoint(x: shoulderX, y: 112)
+        // 左手/右手镜像：举起时方向相反
+        let raised: Double = shoulderX < 120 ? 150 : -150
+        let angle = dragged ? raised : restDegrees + Double(swingDegrees)
+        drawRotated(in: ctx, around: pivot, degrees: angle) { c in
             c.fill(
-                Path(roundedRect: CGRect(x: x, y: 158, width: 16, height: 46), cornerRadius: 7),
-                with: .color(color)
+                Path(roundedRect: CGRect(x: shoulderX - 5, y: 110, width: 10, height: 26), cornerRadius: 5),
+                with: .color(Palette.body)
+            )
+            c.fill(
+                Path(ellipseIn: CGRect(x: shoulderX - 4.5, y: 130, width: 9, height: 9)),
+                with: .color(Palette.dark)
+            )
+        }
+    }
+
+    /// 画一条腿，绕胯部旋转。坐下时向外撇开。
+    private func drawLeg(in ctx: GraphicsContext, hipX: CGFloat, degrees: CGFloat, sitting: Bool) {
+        let pivot = CGPoint(x: hipX, y: 166)
+        let splay: CGFloat = hipX < 120 ? -75 : 75
+        let angle = sitting ? Double(splay) : Double(degrees)
+        drawRotated(in: ctx, around: pivot, degrees: angle) { c in
+            c.fill(
+                Path(roundedRect: CGRect(x: hipX - 6.5, y: 164, width: 13, height: 40), cornerRadius: 6),
+                with: .color(Palette.body)
             )
             // 蹄子
             c.fill(
-                Path(roundedRect: CGRect(x: x, y: 194, width: 16, height: 10), cornerRadius: 4),
+                Path(roundedRect: CGRect(x: hipX - 6.5, y: 194, width: 13, height: 10), cornerRadius: 4),
                 with: .color(Palette.dark)
             )
         }
@@ -252,4 +273,8 @@ private extension PetViewModel.State {
         if case .walkingTo = self { return true }
         return false
     }
+}
+
+private extension NiulaiView.AnimationParams {
+    var isSquashed: Bool { squashY < 0.98 }
 }

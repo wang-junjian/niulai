@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:niulai}",
+            "name": "Debug Niulai",
+            "target": "Niulai",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug Niulai"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:niulai}",
+            "name": "Release Niulai",
+            "target": "Niulai",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release Niulai"
+        }
+    ]
+}
