@@ -31,8 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.show()
         pet.start()
         lark.start()
-        // 「豹拉常伴」上次开着的话，启动就让它登场
-        if UserDefaults.standard.bool(forKey: "baolaAlways") {
+        // 「豹拉常伴」上次开着且当前是休闲模式，启动就让它登场
+        if pet.mode == .leisure, UserDefaults.standard.bool(forKey: "baolaAlways") {
             companion.appear()
         }
     }

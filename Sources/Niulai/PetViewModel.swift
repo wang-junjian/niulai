@@ -55,6 +55,7 @@ final class PetViewModel: ObservableObject {
     // MARK: - 模式切换
 
     private func reactToModeChange() {
+        companion?.onPetModeChanged(mode)
         switch mode {
         case .working:
             showBubble("我去做个勇敢的梦啦，你专心工作~", duration: 3)
