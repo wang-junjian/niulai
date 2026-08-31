@@ -120,10 +120,12 @@ final class PetViewModel: ObservableObject {
 
     func start() {
         lastTick = Date()
-        ticker = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             MainActor.assumeIsolated { self.tick() }
         }
+        RunLoop.main.add(timer, forMode: .common)   // 菜单打开时也保持运行
+        ticker = timer
         configureReminder()
         if mode == .working {
             settleIntoCorner()
@@ -136,7 +138,7 @@ final class PetViewModel: ObservableObject {
 
     private func tick() {
         let now = Date()
-        let dt = CGFloat(now.timeIntervalSince(lastTick))
+        let dt = min(CGFloat(now.timeIntervalSince(lastTick)), 0.1)   // 封顶，防补帧瞬移
         lastTick = now
 
         guard isVisible, let window else { return }

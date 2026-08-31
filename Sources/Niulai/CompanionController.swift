@@ -96,7 +96,7 @@ final class CompanionController: ObservableObject {
 
     private func tick() {
         let now = Date()
-        let dt = CGFloat(now.timeIntervalSince(lastTick))
+        let dt = min(CGFloat(now.timeIntervalSince(lastTick)), 0.1)
         lastTick = now
         guard present, let window, let petWindow = pet.window else { return }
         let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
@@ -211,9 +211,11 @@ final class CompanionController: ObservableObject {
     private func startTimer() {
         lastTick = Date()
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             MainActor.assumeIsolated { self.tick() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 }
