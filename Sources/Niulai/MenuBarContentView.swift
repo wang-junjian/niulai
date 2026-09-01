@@ -7,6 +7,7 @@ struct MenuBarContentView: View {
     @AppStorage("roamingEnabled") private var roamingEnabled = true
     @AppStorage("reminderMinutes") private var reminderMinutes = 45
     @AppStorage("baolaAlways") private var baolaAlways = false
+    @AppStorage("soundEnabled") private var soundEnabled = true
 
     var body: some View {
         Text("模式")
@@ -42,6 +43,8 @@ struct MenuBarContentView: View {
             .onChange(of: baolaAlways) {
                 viewModel.companion?.setAlways(baolaAlways)
             }
+
+        Toggle("音效", isOn: $soundEnabled)
 
         Picker("休息提醒", selection: $reminderMinutes) {
             Text("关闭").tag(0)

@@ -10,8 +10,11 @@ echo "🔨 编译 release 版本..."
 swift build -c release
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Niulai "$APP/Contents/MacOS/"
+
+# 音效资源（SwiftPM 生成的资源 bundle：mama.mp3 / niulai.mp3）
+cp -R .build/release/Niulai_Niulai.bundle "$APP/Contents/Resources/" 2>/dev/null || true
 
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>

@@ -290,7 +290,12 @@ final class PetViewModel: ObservableObject {
 
         // 打盹时偶尔说梦话（平均约 20 秒一句）
         if state == .sleeping, bubbleText == nil, Int.random(in: 0..<1200) == 0 {
-            showBubble(Self.dreamPhrases.randomElement() ?? "（梦话）哞……", duration: 3.5)
+            let phrase = Self.dreamPhrases.randomElement() ?? "（梦话）哞……"
+            showBubble(phrase, duration: 3.5)
+            // 梦到妈妈的那句：低音量同步播放电影里呢喃的「妈妈」
+            if phrase.contains("妈妈") {
+                SoundPlayer.play(SoundPlayer.mama, volume: 0.3)
+            }
         }
     }
 
@@ -686,6 +691,7 @@ final class PetViewModel: ObservableObject {
 
     /// 阶段切换：专注→休息（每 4 轮一次 15 分钟长休息），休息→专注
     private func advancePomodoroPhase() {
+        SoundPlayer.play(SoundPlayer.niulai, volume: 0.8)   // 一声「牛来！」叫你换阶段
         switch pomodoroPhase {
         case .focus:
             completedFocusCount += 1
