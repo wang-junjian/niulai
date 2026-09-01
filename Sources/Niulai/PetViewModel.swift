@@ -83,7 +83,7 @@ final class PetViewModel: ObservableObject {
     private var wasCharging = false
     private var lowBatteryWarned = false
 
-    // 梦到妈妈彩蛋：休闲模式每次入睡掷签，抽中的觉里第一次梦话带原声（一觉最多一次）
+    // 梦到妈妈彩蛋：休闲模式每次入睡掷签，抽中的觉睡到中途必然触发（一觉最多一次）
     private var mamaDreamArmed = false
     private var mamaDreamPlayed = false
 
@@ -292,15 +292,18 @@ final class PetViewModel: ObservableObject {
             }
         }
 
+        // 被抽中的休闲小睡（约 1/4）：睡到中途必然梦到妈妈，低音量呢喃原声
+        // ——不赌随机梦话的时机（小睡只有 4-9 秒，随机梦话大概率来不及触发）
+        if state == .sleeping, mamaDreamArmed, !mamaDreamPlayed,
+           bubbleText == nil, stateElapsed > 1.2 {
+            mamaDreamPlayed = true
+            showBubble("（梦话）妈妈，快跑……", duration: 3.5)
+            SoundPlayer.play(SoundPlayer.mama, volume: 0.3)
+        }
+
         // 打盹时偶尔说梦话（平均约 20 秒一句）
         if state == .sleeping, bubbleText == nil, Int.random(in: 0..<1200) == 0 {
-            var phrase = Self.dreamPhrases.randomElement() ?? "（梦话）哞……"
-            // 被抽中的休闲小睡：第一次梦话就是梦到妈妈，低音量呢喃原声
-            if mamaDreamArmed, !mamaDreamPlayed {
-                mamaDreamPlayed = true
-                phrase = "（梦话）妈妈，快跑……"
-                SoundPlayer.play(SoundPlayer.mama, volume: 0.3)
-            }
+            let phrase = Self.dreamPhrases.randomElement() ?? "（梦话）哞……"
             showBubble(phrase, duration: 3.5)
         }
     }
