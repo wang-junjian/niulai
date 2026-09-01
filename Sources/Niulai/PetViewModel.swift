@@ -386,9 +386,8 @@ final class PetViewModel: ObservableObject {
     /// 点击/戳一下
     func poke() {
         guard state != .dragged else { return }
-        // 番茄钟专注中被戳：迷迷糊糊报个倒计时（想看时间就问牛来，平时不显示）
+        // 番茄钟专注中被戳：不吵醒它（保持睡觉姿势），只冒出气泡报个倒计时
         if mode == .pomodoro, pomodoroPhase == .focus {
-            setState(.happy, duration: 0.8)
             if pomodoroPaused {
                 showBubble("哞……番茄钟暂停着呢，要继续吗？", duration: 3)
             } else {
