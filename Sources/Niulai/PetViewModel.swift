@@ -83,6 +83,10 @@ final class PetViewModel: ObservableObject {
     private var wasCharging = false
     private var lowBatteryWarned = false
 
+    // 梦到妈妈彩蛋：休闲模式每次入睡掷签，抽中的觉里第一次梦话带原声（一觉最多一次）
+    private var mamaDreamArmed = false
+    private var mamaDreamPlayed = false
+
     // 番茄钟
     @Published private(set) var pomodoroPhase: PomodoroPhase = .focus
     @Published private(set) var pomodoroCountdown = ""
@@ -290,12 +294,14 @@ final class PetViewModel: ObservableObject {
 
         // 打盹时偶尔说梦话（平均约 20 秒一句）
         if state == .sleeping, bubbleText == nil, Int.random(in: 0..<1200) == 0 {
-            let phrase = Self.dreamPhrases.randomElement() ?? "（梦话）哞……"
-            showBubble(phrase, duration: 3.5)
-            // 梦到妈妈的那句：低音量同步播放电影里呢喃的「妈妈」
-            if phrase.contains("妈妈") {
+            var phrase = Self.dreamPhrases.randomElement() ?? "（梦话）哞……"
+            // 被抽中的休闲小睡：第一次梦话就是梦到妈妈，低音量呢喃原声
+            if mamaDreamArmed, !mamaDreamPlayed {
+                mamaDreamPlayed = true
+                phrase = "（梦话）妈妈，快跑……"
                 SoundPlayer.play(SoundPlayer.mama, volume: 0.3)
             }
+            showBubble(phrase, duration: 3.5)
         }
     }
 
@@ -341,7 +347,12 @@ final class PetViewModel: ObservableObject {
         stateUntil = Date().addingTimeInterval(duration)
         // 通知豹拉：牛来出发散步 / 睡着了
         if s == .walking { companion?.onPetStartedWalking() }
-        if s == .sleeping { companion?.onPetStartedSleeping() }
+        if s == .sleeping {
+            companion?.onPetStartedSleeping()
+            // 休闲打盹约 1/4 概率被抽中梦到妈妈（工作/番茄钟的睡绝不播放，不打扰）
+            mamaDreamArmed = mode == .leisure && Double.random(in: 0..<1) < 0.25
+            mamaDreamPlayed = false
+        }
     }
 
     // MARK: - 窗口移动
