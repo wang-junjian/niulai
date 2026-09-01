@@ -151,21 +151,22 @@ struct BaolaView: View {
     }
 }
 
-/// 豹拉的容器：气泡 + 本体，点击有反应。
+/// 豹拉的容器：气泡悬浮头顶（不参与布局），本体锚定底部，点击有反应。
 struct BaolaContainerView: View {
     @ObservedObject var controller: CompanionController
 
     var body: some View {
-        VStack(spacing: 0) {
-            SpeechBubbleView(text: controller.bubbleText)
-                .frame(height: 60)
-            BaolaView(controller: controller)
-                .frame(width: 200, height: 190)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    controller.poke()
-                }
-        }
-        .frame(width: 200, height: 250)
+        BaolaView(controller: controller)
+            .frame(width: 200, height: 190)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                controller.poke()
+            }
+            .frame(width: 200, height: 250, alignment: .bottom)
+            .overlay(alignment: .top) {
+                SpeechBubbleView(text: controller.bubbleText)
+                    .frame(height: 60)
+                    .allowsHitTesting(false)
+            }
     }
 }

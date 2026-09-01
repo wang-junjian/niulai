@@ -7,18 +7,20 @@ struct PetContainerView: View {
     @State private var grabOffset: CGPoint?
 
     var body: some View {
-        VStack(spacing: 0) {
-            SpeechBubbleView(text: viewModel.bubbleText)
-                .frame(height: 70)
-            NiulaiView(viewModel: viewModel)
-                .frame(width: 240, height: 230)
-                .contentShape(Rectangle())
-                .gesture(dragGesture)
-                .onTapGesture {
-                    viewModel.poke()
-                }
-        }
-        .frame(width: 240, height: 300)
+        NiulaiView(viewModel: viewModel)
+            .frame(width: 240, height: 230)
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+            .onTapGesture {
+                viewModel.poke()
+            }
+            .frame(width: 240, height: 300, alignment: .bottom)   // 牛来锚定窗口底部
+            .overlay(alignment: .top) {
+                // 气泡悬浮在头顶，不参与布局：出现/消失时牛来原地不动
+                SpeechBubbleView(text: viewModel.bubbleText)
+                    .frame(height: 70)
+                    .allowsHitTesting(false)
+            }
     }
 
     private var dragGesture: some Gesture {
