@@ -102,6 +102,8 @@ final class PetViewModel: ObservableObject {
     // MARK: - 模式切换
 
     private func reactToModeChange() {
+        lastReactedMode = mode
+        objectWillChange.send()
         switch mode {
         case .working:
             stopPomodoro()
@@ -127,6 +129,10 @@ final class PetViewModel: ObservableObject {
         case .pomodoro: return pomodoroPhase == .focus
         }
     }
+
+    /// 最近一次已响应的模式；tick 里轮询 UserDefaults，发现不一致就补响应，
+    /// 保证无论改动来自菜单按钮还是外部（defaults 命令）都能生效
+    private var lastReactedMode: PetMode?
 
     /// 工作模式的归宿：走到屏幕右下角趴睡；已经在角落就直接睡
     private func settleIntoCorner() {
@@ -199,6 +205,7 @@ final class PetViewModel: ObservableObject {
         case .leisure:
             setState(.idle, duration: 3)
         }
+        lastReactedMode = mode   // 启动分支已处理，避免 tick 第一帧重复响应
     }
 
     // MARK: - 主循环
@@ -207,6 +214,9 @@ final class PetViewModel: ObservableObject {
         let now = Date()
         let dt = min(CGFloat(now.timeIntervalSince(lastTick)), 0.1)   // 封顶，防补帧瞬移
         lastTick = now
+
+        // 模式是 UserDefaults 背书的：发现变化（菜单按钮或外部改动）立刻响应
+        if mode != lastReactedMode { reactToModeChange() }
 
         guard isVisible, let window else { return }
 

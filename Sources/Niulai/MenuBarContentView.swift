@@ -9,11 +9,10 @@ struct MenuBarContentView: View {
     @AppStorage("baolaAlways") private var baolaAlways = false
 
     var body: some View {
-        Picker("模式", selection: $viewModel.mode) {
-            Text("休闲").tag(PetViewModel.PetMode.leisure)
-            Text("工作（梦境）").tag(PetViewModel.PetMode.working)
-            Text("番茄钟").tag(PetViewModel.PetMode.pomodoro)
-        }
+        Text("模式")
+        modeButton("休闲", .leisure)
+        modeButton("工作", .working)
+        modeButton("番茄钟", .pomodoro)
 
         if viewModel.mode == .pomodoro {
             Divider()
@@ -66,5 +65,15 @@ struct MenuBarContentView: View {
             NSApp.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    /// 模式切换按钮：当前模式带勾选标记。
+    /// （原来用 Picker，但 Picker 在 menu 样式的 MenuBarExtra 里选择不生效，换成按钮）
+    private func modeButton(_ title: String, _ mode: PetViewModel.PetMode) -> some View {
+        Button {
+            viewModel.mode = mode
+        } label: {
+            Label(title, systemImage: viewModel.mode == mode ? "checkmark.circle.fill" : "circle")
+        }
     }
 }
