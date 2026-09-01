@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import IOKit.ps
 
 /// 牛来的行为状态机：决定它什么时候发呆、漫步、坐下、打盹，
 /// 并驱动窗口在桌面上移动。点击互动和休息提醒也在这里。
@@ -15,6 +16,8 @@ final class PetViewModel: ObservableObject {
         case sleeping        // 打盹
         case happy           // 开心（被戳/落地后的短暂反应）
         case dragged         // 被鼠标抓着
+        case startled        // 吓一跳（小绳头/狼影）
+        case investigating(CGFloat)  // 鼓起勇气凑近看（小绳头）
     }
 
     /// 休闲：满地漫游；工作：趴角落睡觉做梦，安静不打扰
@@ -42,6 +45,8 @@ final class PetViewModel: ObservableObject {
     weak var window: NSWindow?
     weak var companion: CompanionController?
     weak var lark: LarkController?
+    weak var rope: RopeController?
+    weak var wolf: WolfController?
 
     private let walkSpeed: CGFloat = 55
     private var ticker: Timer?
@@ -49,6 +54,18 @@ final class PetViewModel: ObservableObject {
     private var lastTick = Date()
     private var stateUntil = Date()
     private var bubbleGeneration = 0
+
+    // 彩蛋事件调度
+    private let demoMode = CommandLine.arguments.contains("--demo")
+    private var eventTimer: Timer?
+    private var nextRopeAt = Date.distantFuture
+    private var nextWolfAt = Date.distantFuture
+    private var pendingRopeX: CGFloat?
+
+    // 电量感知
+    private var batteryTimer: Timer?
+    private var wasCharging = false
+    private var lowBatteryWarned = false
 
     nonisolated init() {}
 
@@ -127,6 +144,8 @@ final class PetViewModel: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)   // 菜单打开时也保持运行
         ticker = timer
         configureReminder()
+        scheduleEvents()
+        startBatteryMonitor()
         if mode == .working {
             settleIntoCorner()
         } else {
@@ -142,7 +161,6 @@ final class PetViewModel: ObservableObject {
         lastTick = now
 
         guard isVisible, let window else { return }
-
 
         switch state {
         case .walking:
@@ -162,11 +180,36 @@ final class PetViewModel: ObservableObject {
             if abs(window.frame.minX - target) < 24 {
                 setState(.sleeping, duration: 3600)
             }
+        case .investigating(let ropeX):
+            // 蹑手蹑脚地凑近看
+            let dir: CGFloat = ropeX > window.frame.midX ? 1 : -1
+            facingLeft = dir < 0
+            let step = walkSpeed * 0.55 * dt * dir
+            move(dx: step)
+            bounceOffScreenEdge()
+            if abs(window.frame.midX - ropeX) < 70 {
+                pendingRopeX = nil
+                rope?.dismiss()
+                showBubble("呼……只是根绳子，不怕不怕", duration: 3)
+                setState(.happy, duration: 2)
+            }
         default:
             break
         }
 
-        if now >= stateUntil, state != .dragged {
+        // 惊吓结束 → 鼓起勇气去查看绳子
+        if state == .startled, now >= stateUntil, let ropeX = pendingRopeX {
+            state = .investigating(ropeX)
+            stateUntil = now.addingTimeInterval(25)
+        }
+
+        // 绳子事件被打断（比如被拎走）：把绳子收走，别留在屏幕上
+        if pendingRopeX != nil, state != .startled, !state.isInvestigating {
+            pendingRopeX = nil
+            rope?.dismiss()
+        }
+
+        if now >= stateUntil, state != .dragged, !state.isInvestigating {
             pickNextState()
         }
 
@@ -294,6 +337,8 @@ final class PetViewModel: ObservableObject {
         }
         companion?.setVisible(visible)
         lark?.setVisible(visible)
+        rope?.setVisible(visible)
+        wolf?.setVisible(visible)
     }
 
     /// “自由走动”开关变化后调用
@@ -330,5 +375,133 @@ final class PetViewModel: ObservableObject {
     private func arriveAtReminderSpot() {
         setState(.happy, duration: 2.5)
         showBubble(Self.reminderPhrases.randomElement() ?? "休息一下吧~", duration: 6)
+    }
+
+    // MARK: - 彩蛋事件（小绳头 / 狼影）
+
+    private func scheduleEvents() {
+        let now = Date()
+        // --demo：8 秒后来绳子，25 秒后来狼，方便演示
+        nextRopeAt = now.addingTimeInterval(demoMode ? 8 : .random(in: 300...900))
+        nextWolfAt = now.addingTimeInterval(demoMode ? 25 : .random(in: 600...1500))
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated { self.checkEvents() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        eventTimer = timer
+    }
+
+    private func checkEvents() {
+        guard mode == .leisure, isVisible else { return }
+        let now = Date()
+        if now >= nextRopeAt {
+            if isBusyForEvent {
+                nextRopeAt = now.addingTimeInterval(20)   // 忙就 20 秒后再试
+            } else {
+                nextRopeAt = now.addingTimeInterval(.random(in: 300...900))
+                triggerRopeEvent()
+            }
+        }
+        if now >= nextWolfAt {
+            if isBusyForEvent {
+                nextWolfAt = now.addingTimeInterval(20)
+            } else {
+                nextWolfAt = now.addingTimeInterval(.random(in: 600...1500))
+                triggerWolfEvent()
+            }
+        }
+    }
+
+    /// 忙碌中（被拎/正在惊吓/正在赶路）不触发彩蛋
+    private var isBusyForEvent: Bool {
+        switch state {
+        case .dragged, .startled, .investigating, .walkingTo, .walkingToSleep, .happy:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func triggerRopeEvent() {
+        guard !isBusyForEvent, let rope, let window else { return }
+        rope.spawn(nearPet: window.frame)
+        pendingRopeX = rope.centerX
+        facingLeft = rope.centerX < window.frame.midX
+        setState(.startled, duration: 1.6)
+        showBubble("啊！是小绳头！！", duration: 1.8)
+        companion?.onPetStartled()
+    }
+
+    private func triggerWolfEvent() {
+        guard !isBusyForEvent, let wolf, let window else { return }
+        let fromLeft = Bool.random()
+        wolf.runAcross(fromLeft: fromLeft, groundY: window.frame.minY)
+        facingLeft = fromLeft
+        setState(.startled, duration: 2.2)
+        showBubble("狼……狼！！", duration: 2.2)
+        if companion?.present == true {
+            companion?.guardAgainst(fromLeft: fromLeft)
+        }
+        wolf.onExit = { [weak self] in
+            MainActor.assumeIsolated { self?.afterWolf() }
+        }
+    }
+
+    private func afterWolf() {
+        companion?.endGuard()
+        let protected = companion?.present == true
+        showBubble(protected ? "豹拉……谢谢你保护我" : "呼……它跑掉了，我不怕我不怕", duration: 3)
+        setState(.happy, duration: 1.5)
+    }
+
+    // MARK: - 电量感知
+
+    private func startBatteryMonitor() {
+        checkBattery()
+        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated { self.checkBattery() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        batteryTimer = timer
+    }
+
+    private func checkBattery() {
+        guard let (percent, charging) = Self.readBattery() else { return }
+
+        if charging, !wasCharging {
+            setState(.happy, duration: 1.5)
+            showBubble("来电啦！⚡ 满血复活！", duration: 3)
+        }
+        if !charging, percent <= 20, !lowBatteryWarned {
+            lowBatteryWarned = true
+            showBubble("你快没电了……我也饿得没力气了……记得充电", duration: 5)
+            if mode == .leisure, !isBusyForEvent {
+                setState(.sitting, duration: 60)   // 没精打采
+            }
+        }
+        if percent > 30 { lowBatteryWarned = false }
+        wasCharging = charging
+    }
+
+    /// 通过 IOKit 读取内置电池（台式机无电池时返回 nil）
+    private static func readBattery() -> (percent: Int, charging: Bool)? {
+        guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
+              let source = sources.first,
+              let desc = IOPSGetPowerSourceDescription(snapshot, source)?.takeUnretainedValue() as? [String: Any],
+              (desc[kIOPSTypeKey] as? String) == kIOPSInternalBatteryType,
+              let capacity = desc[kIOPSCurrentCapacityKey] as? Int,
+              let charging = desc[kIOPSIsChargingKey] as? Bool
+        else { return nil }
+        return (capacity, charging)
+    }
+}
+
+private extension PetViewModel.State {
+    var isInvestigating: Bool {
+        if case .investigating = self { return true }
+        return false
     }
 }

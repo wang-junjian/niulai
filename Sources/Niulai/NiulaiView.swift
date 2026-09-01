@@ -56,6 +56,16 @@ struct NiulaiView: View {
                 lift = -abs(sin(t * 10)) * 4
                 legPhase = t * 10
                 legSwing = 22
+            } else if state == .startled {
+                // 吓一跳：原地快速连跳
+                lift = -abs(sin(t * 14)) * 10
+                legPhase = 0
+                legSwing = 0
+            } else if case .investigating = state {
+                // 蹑手蹑脚：慢速小步
+                lift = -abs(sin(t * 5)) * 2
+                legPhase = t * 5
+                legSwing = 12
             } else if state == .happy {
                 lift = -abs(sin(t * 9)) * 16
                 legPhase = t * 9
@@ -82,13 +92,13 @@ struct NiulaiView: View {
             // 被拎着：身体轻轻晃荡
             tilt = state == .dragged ? sin(t * 5) * 6 : 0
 
-            // 每 4.3 秒眨一次眼（睡觉和被拎时不眨）
+            // 每 4.3 秒眨一次眼（睡觉、被拎、惊吓时不眨）
             let cycle = t.truncatingRemainder(dividingBy: 4.3)
-            blinking = cycle < 0.12 && state != .sleeping && state != .dragged
+            blinking = cycle < 0.12 && state != .sleeping && state != .dragged && state != .startled
 
             eyesClosed = state == .sleeping || blinking
             happyMouth = state == .happy
-            wideEyes = state == .dragged
+            wideEyes = state == .dragged || state == .startled
 
             // 开心/走路时尾巴摇得更欢
             let wagSpeed = (state == .happy || isWalking) ? 6.0 : 2.2

@@ -19,6 +19,7 @@ final class CompanionController: ObservableObject {
     private var leaving = false
     private var following = false
     private var reactionUntil = Date.distantPast
+    private var guardTargetX: CGFloat?   // 护卫位：狼影事件时挡在牛来身前
     private var bubbleGeneration = 0
 
     static let size = NSSize(width: 200, height: 250)
@@ -119,10 +120,10 @@ final class CompanionController: ObservableObject {
             return
         }
 
-        // 目标位：牛来身后一个身位
-        let targetX = pet.facingLeft
+        // 目标位：护卫位优先（狼影事件），否则牛来身后一个身位
+        let targetX = guardTargetX ?? (pet.facingLeft
             ? petWindow.frame.maxX + 6
-            : petWindow.frame.minX - Self.size.width - 6
+            : petWindow.frame.minX - Self.size.width - 6)
         var origin = window.frame.origin
         let dx = targetX - origin.x
 
@@ -140,7 +141,8 @@ final class CompanionController: ObservableObject {
                 facingLeft = dx < 0
                 state = .walking
             } else {
-                state = mirroredState(from: pet.state)
+                // 护卫时保持警觉的弹跳姿态
+                state = guardTargetX != nil ? .happy : mirroredState(from: pet.state)
             }
         }
 
@@ -156,6 +158,28 @@ final class CompanionController: ObservableObject {
         case .happy: return .happy
         default: return .idle
         }
+    }
+
+    // MARK: - 护卫（狼影事件）
+
+    /// 狼来了：冲到牛来与狼之间，摆出护卫姿态
+    func guardAgainst(fromLeft: Bool) {
+        guard present, let petWindow = pet.window else { return }
+        guardTargetX = fromLeft
+            ? petWindow.frame.minX - Self.size.width - 4
+            : petWindow.frame.maxX + 4
+        showBubble("嗷呜！！有我在，别怕！", duration: 3)
+    }
+
+    func endGuard() {
+        guardTargetX = nil
+    }
+
+    /// 牛来被小绳头吓到：豹拉也陪着吓一跳
+    func onPetStartled() {
+        guard present else { return }
+        reactionUntil = Date().addingTimeInterval(1.6)
+        state = .startled
     }
 
     // MARK: - 互动

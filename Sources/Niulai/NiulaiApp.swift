@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let pet = PetViewModel()
     lazy var companion = CompanionController(pet: pet)
     lazy var lark = LarkController(pet: pet)
+    lazy var rope = RopeController()
+    lazy var wolf = WolfController()
     private var windowController: PetWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -28,6 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController = controller
         pet.companion = companion
         pet.lark = lark
+        pet.rope = rope
+        pet.wolf = wolf
         controller.show()
         pet.start()
         lark.start()
