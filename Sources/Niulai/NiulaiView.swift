@@ -65,7 +65,7 @@ struct NiulaiView: View {
         let tailWag: CGFloat   // 尾巴摆动角度（牛来正面视角不可见，供豹拉复用）
 
         init(state: PetViewModel.State, t: TimeInterval, elapsed: TimeInterval) {
-            let isWalking = state == .walking || state.isWalkingTo
+            let isWalking = state == .walking || state.isWalkingToSleep
 
             // 走路：小碎步弹跳 + 四肢摆动；开心：原地跳
             if isWalking {
@@ -358,8 +358,7 @@ struct NiulaiView: View {
 // MARK: - 便捷访问
 
 private extension PetViewModel.State {
-    var isWalkingTo: Bool {
-        if case .walkingTo = self { return true }
+    var isWalkingToSleep: Bool {
         if case .walkingToSleep = self { return true }
         return false
     }
