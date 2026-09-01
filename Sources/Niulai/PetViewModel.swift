@@ -17,6 +17,12 @@ final class PetViewModel: ObservableObject {
         case happy           // 开心（被戳/落地后的短暂反应）
         case dragged         // 被鼠标抓着
         case startled        // 吓一跳（蛇/狼影掠过）
+        case chasing         // 追蝴蝶（小跑）
+        case pouncing        // 跳起来扑蝴蝶
+        case stretching      // 睡醒伸懒腰打哈欠
+        case headbutting     // 拿角顶屏幕边缘
+        case spinning        // 原地转圈追尾巴
+        case dizzy           // 转晕了，晕乎乎坐地上
     }
 
     /// 休闲：满地漫游；工作：趴角落睡觉做梦，安静不打扰；番茄钟：专注+休息循环
@@ -47,11 +53,16 @@ final class PetViewModel: ObservableObject {
     @Published var bubbleText: String?
     @Published var isVisible = true
 
+    /// 当前状态的开始时刻（动画按经过时间编排子阶段，如哈欠→伸懒腰）
+    private(set) var stateStartedAt = Date()
+    var stateElapsed: TimeInterval { Date().timeIntervalSince(stateStartedAt) }
+
     weak var window: NSWindow?
     weak var companion: CompanionController?
     weak var lark: LarkController?
     weak var snake: SnakeController?
     weak var wolf: WolfController?
+    weak var butterfly: ButterflyController?
 
     private let walkSpeed: CGFloat = 55
     private var ticker: Timer?
@@ -65,6 +76,7 @@ final class PetViewModel: ObservableObject {
     private var eventTimer: Timer?
     private var nextSnakeAt = Date.distantFuture
     private var nextWolfAt = Date.distantFuture
+    private var nextButterflyAt = Date.distantFuture
 
     // 电量感知
     private var batteryTimer: Timer?
@@ -201,7 +213,7 @@ final class PetViewModel: ObservableObject {
         switch state {
         case .walking:
             move(dx: walkSpeed * dt * (facingLeft ? -1 : 1))
-            bounceOffScreenEdge()
+            bounceOffScreenEdge(allowHeadbutt: true)   // 偶尔把屏幕边当对手顶两下
         case .walkingTo(let target):
             let dir: CGFloat = target > window.frame.minX ? 1 : -1
             facingLeft = dir < 0
@@ -216,12 +228,51 @@ final class PetViewModel: ObservableObject {
             if abs(window.frame.minX - target) < 24 {
                 setState(.sleeping, duration: 3600)
             }
+        case .chasing:
+            // 小跑追蝴蝶：蝴蝶没了就收手
+            guard let butterfly, butterfly.flying else {
+                butterflyGone()
+                break
+            }
+            let target = butterfly.currentX - window.frame.width / 2
+            let dir: CGFloat = target > window.frame.minX ? 1 : -1
+            facingLeft = dir < 0
+            move(dx: walkSpeed * 2.2 * dt * dir)
+            bounceOffScreenEdge()
+        case .pouncing:
+            // 向前小跳一步
+            move(dx: (facingLeft ? -1 : 1) * 35 * dt)
+            bounceOffScreenEdge()
         default:
             break
         }
 
+        // 状态到点后的去向
         if now >= stateUntil, state != .dragged {
-            pickNextState()
+            switch state {
+            case .sleeping where !isPeaceful:
+                // 睡醒先伸个大懒腰（番茄钟专注期的长睡由番茄钟自己接管）
+                if Double.random(in: 0..<1) < 0.6 {
+                    setState(.stretching, duration: 2.8)
+                } else {
+                    pickNextState()
+                }
+            case .spinning:
+                setState(.dizzy, duration: 1.8)   // 转晕了
+            case .dizzy:
+                setState(.sitting, duration: .random(in: 4...8))   // 晕完坐地上缓缓
+            case .headbutting:
+                facingLeft = !facingLeft   // 顶完掉头就走
+                setState(.walking, duration: .random(in: 4...8))
+            case .pouncing:
+                // 扑空了，若无其事
+                showBubble("嘿嘿……差点就抓到了", duration: 2.5)
+                setState(.idle, duration: 2.5)
+            case .chasing:
+                butterflyGone()   // 追太久，追丢了
+            default:
+                pickNextState()
+            }
         }
 
         // 打盹时偶尔说梦话（平均约 20 秒一句）
@@ -245,7 +296,8 @@ final class PetViewModel: ObservableObject {
             (.idle, 3),
             (.walking, 3.5),
             (.sitting, 2),
-            (.sleeping, 1)
+            (.sleeping, 1),
+            (.spinning, 0.7)   // 偶尔犯傻：转圈追自己尾巴
         ]
         let total = pool.reduce(0) { $0 + $1.1 }
         var r = Double.random(in: 0..<total)
@@ -254,16 +306,20 @@ final class PetViewModel: ObservableObject {
             r -= w
             if r <= 0 { picked = s; break }
         }
-        if picked == .walking {
+        switch picked {
+        case .walking:
             facingLeft = Bool.random()
             setState(.walking, duration: Double.random(in: 5...12))
-        } else {
+        case .spinning:
+            setState(.spinning, duration: 1.6)
+        default:
             setState(picked, duration: Double.random(in: 4...9))
         }
     }
 
     private func setState(_ s: State, duration: TimeInterval) {
         state = s
+        stateStartedAt = Date()
         stateUntil = Date().addingTimeInterval(duration)
         // 通知豹拉：牛来出发散步 / 睡着了
         if s == .walking { companion?.onPetStartedWalking() }
@@ -285,18 +341,30 @@ final class PetViewModel: ObservableObject {
         window.setFrameOrigin(origin)
     }
 
-    private func bounceOffScreenEdge() {
+    private func bounceOffScreenEdge(allowHeadbutt: Bool = false) {
         guard let window else { return }
         let vf = visibleFrame
         var origin = window.frame.origin
-        if origin.x < vf.minX {
-            origin.x = vf.minX
-            facingLeft = false
-            window.setFrameOrigin(origin)
-        } else if origin.x + window.frame.width > vf.maxX {
-            origin.x = vf.maxX - window.frame.width
-            facingLeft = true
-            window.setFrameOrigin(origin)
+        let hitLeft = origin.x < vf.minX
+        let hitRight = origin.x + window.frame.width > vf.maxX
+        guard hitLeft || hitRight else { return }
+
+        origin.x = hitLeft ? vf.minX : vf.maxX - window.frame.width
+        window.setFrameOrigin(origin)
+
+        // 偶尔把屏幕边缘当成较劲的对手，低头顶两下
+        if allowHeadbutt, Double.random(in: 0..<1) < 0.3 {
+            facingLeft = hitLeft
+            enterHeadbutt()
+            return
+        }
+        facingLeft = hitRight
+    }
+
+    private func enterHeadbutt() {
+        setState(.headbutting, duration: 2.2)
+        if Double.random(in: 0..<1) < 0.5 {
+            showBubble("哞！这堵墙跟我较劲！", duration: 2.2)
         }
     }
 
@@ -350,6 +418,7 @@ final class PetViewModel: ObservableObject {
         lark?.setVisible(visible)
         snake?.setVisible(visible)
         wolf?.setVisible(visible)
+        butterfly?.setVisible(visible)
     }
 
     /// “自由走动”开关变化后调用
@@ -392,8 +461,9 @@ final class PetViewModel: ObservableObject {
 
     private func scheduleEvents() {
         let now = Date()
-        // --demo：8 秒后来蛇，30 秒后来狼，方便演示
+        // --demo：8 秒来蛇、15 秒来蝴蝶、30 秒来狼，方便演示
         nextSnakeAt = now.addingTimeInterval(demoMode ? 8 : .random(in: 300...900))
+        nextButterflyAt = now.addingTimeInterval(demoMode ? 15 : .random(in: 240...720))
         nextWolfAt = now.addingTimeInterval(demoMode ? 30 : .random(in: 600...1500))
         let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             guard let self else { return }
@@ -423,12 +493,23 @@ final class PetViewModel: ObservableObject {
                 triggerWolfEvent()
             }
         }
+        if now >= nextButterflyAt {
+            if isBusyForEvent {
+                nextButterflyAt = now.addingTimeInterval(20)
+            } else {
+                nextButterflyAt = now.addingTimeInterval(.random(in: 240...720))
+                if let window {
+                    butterfly?.flyAcross(fromLeft: Bool.random(), groundY: window.frame.minY)
+                }
+            }
+        }
     }
 
-    /// 忙碌中（被拎/正在惊吓/正在赶路）不触发彩蛋
+    /// 忙碌中（被拎/正在惊吓/正在追蝴蝶等）不触发彩蛋
     private var isBusyForEvent: Bool {
         switch state {
-        case .dragged, .startled, .walkingTo, .walkingToSleep, .happy:
+        case .dragged, .startled, .walkingTo, .walkingToSleep, .happy,
+             .chasing, .pouncing, .stretching, .headbutting, .spinning, .dizzy:
             return true
         default:
             return false
@@ -451,6 +532,35 @@ final class PetViewModel: ObservableObject {
     private func afterSnake() {
         showBubble("呼……爬走了爬走了，我不怕", duration: 3)
         setState(.happy, duration: 1.5)
+    }
+
+    // MARK: - 追蝴蝶
+
+    /// 蝴蝶路过附近：开追！
+    func startChasingButterfly() {
+        guard !isPeaceful, isVisible, !isBusyForEvent, butterfly != nil else { return }
+        showBubble("蝴蝶！等等我！", duration: 2)
+        setState(.chasing, duration: 8)   // 兜底：追不上自己停下
+    }
+
+    /// 蝴蝶快到屏幕边了：跳起来扑
+    func pounceAtButterfly() {
+        guard state == .chasing else { return }
+        setState(.pouncing, duration: 0.9)
+    }
+
+    /// 蝴蝶飞出屏幕（可能在追/扑中途消失）
+    func butterflyGone() {
+        switch state {
+        case .chasing:
+            showBubble("咦？蝴蝶呢……", duration: 2)
+            setState(.idle, duration: 2)
+        case .pouncing:
+            showBubble("嘿嘿……差点就抓到了", duration: 2.5)
+            setState(.idle, duration: 2.5)
+        default:
+            break
+        }
     }
 
     private func triggerWolfEvent() {
@@ -556,7 +666,7 @@ final class PetViewModel: ObservableObject {
             let longRest = completedFocusCount % 4 == 0
             phaseEndsAt = Date().addingTimeInterval(longRest ? longRestDuration : restDuration)
             companion?.onPetModeChanged(.leisure)   // 休息时豹拉可以来玩
-            setState(.happy, duration: 3)
+            setState(.stretching, duration: 3)   // 睡醒伸个大懒腰
             showBubble(
                 longRest
                     ? "哞！四轮专注完成！好好休息 15 分钟，你太棒了！"

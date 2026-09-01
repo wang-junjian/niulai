@@ -9,25 +9,35 @@ struct NiulaiView: View {
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            let p = AnimationParams(state: viewModel.state, t: t)
+            let p = AnimationParams(state: viewModel.state, t: t, elapsed: viewModel.stateElapsed)
 
             ZStack {
                 Canvas { ctx, _ in
                     drawPet(in: ctx, p: p)
                 }
                 .scaleEffect(
-                    x: (viewModel.facingLeft ? -1 : 1) * p.squashX,
+                    // spinFlip：转圈追尾巴时快速左右翻转
+                    x: ((viewModel.facingLeft != p.spinFlip) ? -1 : 1) * p.squashX,
                     y: p.squashY,
                     anchor: .bottom
                 )
-                .rotationEffect(.degrees(p.tilt))
-                .offset(y: p.lift)
+                .rotationEffect(.degrees(p.tilt + p.lean * (viewModel.facingLeft ? -1 : 1)))
+                .offset(
+                    x: p.buttLunge * (viewModel.facingLeft ? -6 : 6),
+                    y: p.lift
+                )
 
                 if viewModel.state == .sleeping {
                     Text("💤")
                         .font(.system(size: 26))
                         .offset(x: 62, y: -66 + sin(t * 1.6) * 5)
                         .opacity(0.85)
+                }
+                if viewModel.state == .dizzy {
+                    Text("💫")
+                        .font(.system(size: 24))
+                        .offset(x: 58, y: -62 + sin(t * 3) * 4)
+                        .opacity(0.9)
                 }
             }
         }
@@ -36,19 +46,25 @@ struct NiulaiView: View {
     // MARK: - 动画参数
 
     struct AnimationParams {
-        let lift: CGFloat      // 整体垂直位移：走路颠簸 + 开心跳起
+        let lift: CGFloat      // 整体垂直位移：走路颠簸 + 开心跳起 + 扑蝶腾跃
         let legPhase: CGFloat  // 四肢摆动相位
         let legSwing: CGFloat  // 腿部摆动幅度（度）
         let squashX: CGFloat
         let squashY: CGFloat
-        let tilt: CGFloat      // 被拎起来时的晃动
+        let tilt: CGFloat      // 被拎起来/转圈时的晃动
+        let lean: CGFloat      // 朝面向方向的前倾（追蝴蝶、顶墙）
+        let buttLunge: CGFloat // 顶墙的前冲量（0-1，向面向方向小冲）
         let blinking: Bool
         let eyesClosed: Bool   // 睡觉或眨眼时闭眼
+        let yawning: Bool      // 打哈欠：嘴大张
+        let dizzyEyes: Bool    // 眩晕螺旋眼
         let happyMouth: Bool   // 开心时张嘴笑
         let wideEyes: Bool     // 被拎着时瞪大眼睛
+        let armRaise: CGFloat  // 手臂上举程度 0-1（被拎=1，伸懒腰=渐入渐出）
+        let spinFlip: Bool     // 转圈追尾巴时的左右翻转
         let tailWag: CGFloat   // 尾巴摆动角度（牛来正面视角不可见，供豹拉复用）
 
-        init(state: PetViewModel.State, t: TimeInterval) {
+        init(state: PetViewModel.State, t: TimeInterval, elapsed: TimeInterval) {
             let isWalking = state == .walking || state.isWalkingTo
 
             // 走路：小碎步弹跳 + 四肢摆动；开心：原地跳
@@ -56,6 +72,17 @@ struct NiulaiView: View {
                 lift = -abs(sin(t * 10)) * 4
                 legPhase = t * 10
                 legSwing = 22
+            } else if state == .chasing {
+                // 小跑追蝴蝶：步子更快更大
+                lift = -abs(sin(t * 15)) * 5
+                legPhase = t * 15
+                legSwing = 32
+            } else if state == .pouncing {
+                // 扑蝶：一次腾跃弧线
+                let frac = min(elapsed / 0.9, 1)
+                lift = -sin(frac * .pi) * 34
+                legPhase = 0
+                legSwing = 0
             } else if state == .startled {
                 // 吓一跳：原地快速连跳
                 lift = -abs(sin(t * 14)) * 10
@@ -72,28 +99,58 @@ struct NiulaiView: View {
             }
 
             // 待机呼吸；坐下时压扁一点；睡觉时呼吸放缓
+            var sx: CGFloat = 1
+            var sy: CGFloat = 1
             switch state {
             case .idle:
-                squashX = 1
-                squashY = 1 + 0.02 * sin(t * 2)
-            case .sitting, .sleeping:
-                squashX = 1.05
-                squashY = 0.93 + 0.015 * sin(t * (state == .sleeping ? 1.2 : 2))
+                sy = 1 + 0.02 * sin(t * 2)
+            case .sitting, .sleeping, .dizzy:
+                sx = 1.05
+                sy = 0.93 + 0.015 * sin(t * (state == .sleeping ? 1.2 : 2))
             default:
-                squashX = 1
-                squashY = 1
+                break
+            }
+            // 伸懒腰：身体拉长变细
+            let stretch: CGFloat = {
+                guard state == .stretching else { return 0 }
+                let rampIn = min(CGFloat(elapsed) / 0.4, 1)
+                let rampOut = elapsed > 2.2 ? max(0, 1 - CGFloat(elapsed - 2.2) / 0.5) : 1
+                return rampIn * rampOut
+            }()
+            sy *= 1 + stretch * 0.09
+            sx *= 1 - stretch * 0.05
+            squashX = sx
+            squashY = sy
+
+            // 被拎着：身体轻轻晃荡；转圈追尾巴：快速摇摆
+            if state == .dragged {
+                tilt = sin(t * 5) * 6
+            } else if state == .spinning {
+                tilt = sin(t * 20) * 8
+            } else {
+                tilt = 0
             }
 
-            // 被拎着：身体轻轻晃荡
-            tilt = state == .dragged ? sin(t * 5) * 6 : 0
+            // 前倾：追蝴蝶/扑蝶时朝目标探身，顶墙时低头用角
+            buttLunge = state == .headbutting ? abs(sin(elapsed * 2.9)) : 0
+            switch state {
+            case .chasing: lean = 6
+            case .pouncing: lean = 8
+            case .headbutting: lean = 14 + 8 * buttLunge
+            default: lean = 0
+            }
 
             // 每 4.3 秒眨一次眼（睡觉、被拎、惊吓时不眨）
             let cycle = t.truncatingRemainder(dividingBy: 4.3)
             blinking = cycle < 0.12 && state != .sleeping && state != .dragged && state != .startled
 
-            eyesClosed = state == .sleeping || blinking
-            happyMouth = state == .happy
+            yawning = state == .stretching && elapsed < 1.2
+            dizzyEyes = state == .dizzy
+            eyesClosed = state == .sleeping || yawning || blinking
+            happyMouth = state == .happy || state == .pouncing
             wideEyes = state == .dragged || state == .startled
+            armRaise = state == .dragged ? 1 : stretch
+            spinFlip = state == .spinning && Int(elapsed / 0.18) % 2 == 1
 
             // 开心/走路时尾巴摇得更欢
             let wagSpeed = (state == .happy || isWalking) ? 6.0 : 2.2
@@ -125,9 +182,9 @@ struct NiulaiView: View {
 
         // 手臂（在身体后面）
         drawArm(in: ctx, shoulderX: 96, restDegrees: 14,
-                swingDegrees: p.legSwing * 0.8 * sin(p.legPhase), dragged: p.wideEyes)
+                swingDegrees: p.legSwing * 0.8 * sin(p.legPhase), raise: p.armRaise)
         drawArm(in: ctx, shoulderX: 144, restDegrees: -14,
-                swingDegrees: -p.legSwing * 0.8 * sin(p.legPhase), dragged: p.wideEyes)
+                swingDegrees: -p.legSwing * 0.8 * sin(p.legPhase), raise: p.armRaise)
 
         // 腿（在身体后面）
         drawLeg(in: ctx, hipX: 106, degrees: p.legSwing * sin(p.legPhase), sitting: p.isSquashed)
@@ -163,7 +220,17 @@ struct NiulaiView: View {
         ctx.fill(horn2, with: .color(Palette.horn))
 
         // 眼睛（丧萌的关键：眼皮耷拉盖住眼球上半）
-        if p.eyesClosed {
+        if p.dizzyEyes {
+            // 转晕了：螺旋眼
+            for cx in [108.0, 132.0] {
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - 8, y: 50, width: 16, height: 13)), with: .color(.white))
+                ctx.stroke(
+                    spiralPath(center: CGPoint(x: cx, y: 56.5), maxR: 5.5),
+                    with: .color(Palette.dark),
+                    style: StrokeStyle(lineWidth: 1.6, lineCap: .round)
+                )
+            }
+        } else if p.eyesClosed {
             for cx in [108.0, 132.0] {
                 var closed = Path()
                 closed.move(to: CGPoint(x: cx - 7, y: 56))
@@ -211,8 +278,11 @@ struct NiulaiView: View {
         ctx.fill(Path(ellipseIn: CGRect(x: 107, y: 74, width: 4.5, height: 7)), with: .color(Palette.dark))
         ctx.fill(Path(ellipseIn: CGRect(x: 128.5, y: 74, width: 4.5, height: 7)), with: .color(Palette.dark))
 
-        // 嘴巴：开心时张嘴笑，平时抿嘴
-        if p.happyMouth {
+        // 嘴巴：打哈欠张最大，开心时张嘴笑，平时抿嘴
+        if p.yawning {
+            ctx.fill(Path(ellipseIn: CGRect(x: 110, y: 81, width: 20, height: 15)), with: .color(Palette.mouth))
+            ctx.fill(Path(ellipseIn: CGRect(x: 114, y: 89, width: 12, height: 6)), with: .color(Palette.blush))
+        } else if p.happyMouth {
             ctx.fill(Path(ellipseIn: CGRect(x: 113, y: 85, width: 14, height: 9)), with: .color(Palette.mouth))
         } else {
             var smile = Path()
@@ -222,13 +292,14 @@ struct NiulaiView: View {
         }
     }
 
-    /// 画一条手臂，绕肩部旋转。被拎着时双手举起来。
+    /// 画一条手臂，绕肩部旋转。raise 0-1 从自然下垂渐变到高举（被拎/伸懒腰）。
     private func drawArm(in ctx: GraphicsContext, shoulderX: CGFloat, restDegrees: Double,
-                         swingDegrees: CGFloat, dragged: Bool) {
+                         swingDegrees: CGFloat, raise: CGFloat) {
         let pivot = CGPoint(x: shoulderX, y: 112)
         // 左手/右手镜像：举起时方向相反
-        let raised: Double = shoulderX < 120 ? 150 : -150
-        let angle = dragged ? raised : restDegrees + Double(swingDegrees)
+        let raised: Double = shoulderX < 120 ? 140 : -140
+        let rest = restDegrees + Double(swingDegrees)
+        let angle = rest + (raised - rest) * Double(raise)
         drawRotated(in: ctx, around: pivot, degrees: angle) { c in
             c.fill(
                 Path(roundedRect: CGRect(x: shoulderX - 5, y: 110, width: 10, height: 26), cornerRadius: 5),
@@ -268,6 +339,18 @@ struct NiulaiView: View {
             layer.translateBy(x: -point.x, y: -point.y)
             draw(&layer)
         }
+    }
+
+    /// 以 center 为中心的阿基米德螺旋（眩晕眼）
+    private func spiralPath(center: CGPoint, maxR: CGFloat) -> Path {
+        var path = Path()
+        for i in 0...24 {
+            let a = Double(i) / 24 * .pi * 3.6
+            let r = maxR * CGFloat(a / (.pi * 3.6))
+            let pt = CGPoint(x: center.x + cos(a) * r, y: center.y + sin(a) * r)
+            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+        }
+        return path
     }
 }
 

@@ -8,7 +8,7 @@ struct BaolaView: View {
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            let p = NiulaiView.AnimationParams(state: controller.state, t: t)
+            let p = NiulaiView.AnimationParams(state: controller.state, t: t, elapsed: 0)
 
             ZStack {
                 Canvas { ctx, _ in

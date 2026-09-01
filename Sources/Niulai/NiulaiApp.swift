@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var lark = LarkController(pet: pet)
     lazy var snake = SnakeController()
     lazy var wolf = WolfController()
+    lazy var butterfly = ButterflyController()
     private var windowController: PetWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -41,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pet.lark = lark
         pet.snake = snake
         pet.wolf = wolf
+        pet.butterfly = butterfly
+        butterfly.pet = pet
         controller.show()
         pet.start()
         lark.start()
