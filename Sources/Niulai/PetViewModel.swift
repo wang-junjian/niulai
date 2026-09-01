@@ -19,9 +19,15 @@ final class PetViewModel: ObservableObject {
         case startled        // 吓一跳（蛇/狼影掠过）
     }
 
-    /// 休闲：满地漫游；工作：趴角落睡觉做梦，安静不打扰
+    /// 休闲：满地漫游；工作：趴角落睡觉做梦，安静不打扰；番茄钟：专注+休息循环
     enum PetMode: String, Hashable {
-        case leisure, working
+        case leisure, working, pomodoro
+    }
+
+    /// 番茄钟阶段
+    enum PomodoroPhase {
+        case focus   // 专注：牛来睡觉做梦
+        case rest    // 休息：牛来醒来陪你活动
     }
 
     /// 直接读写 UserDefaults 的计算属性，避免 @Published 在 nonisolated init 中的隔离问题
@@ -65,19 +71,48 @@ final class PetViewModel: ObservableObject {
     private var wasCharging = false
     private var lowBatteryWarned = false
 
+    // 番茄钟
+    @Published private(set) var pomodoroPhase: PomodoroPhase = .focus
+    @Published private(set) var pomodoroCountdown = ""
+    @Published private(set) var pomodoroPaused = false
+    @Published private(set) var menuBarLabel = "🐮"
+    private var phaseEndsAt = Date()
+    private var pausedRemaining: TimeInterval = 0
+    private var completedFocusCount = 0
+    private var pomodoroTimer: Timer?
+
+    private var focusDuration: TimeInterval { demoMode ? 30 : 25 * 60 }
+    private var restDuration: TimeInterval { demoMode ? 15 : 5 * 60 }
+    private var longRestDuration: TimeInterval { demoMode ? 45 : 15 * 60 }
+
     nonisolated init() {}
 
     // MARK: - 模式切换
 
     private func reactToModeChange() {
-        companion?.onPetModeChanged(mode)
         switch mode {
         case .working:
+            stopPomodoro()
+            companion?.onPetModeChanged(mode)
             showBubble("我去做个勇敢的梦啦，你专心工作~", duration: 3)
             settleIntoCorner()
+        case .pomodoro:
+            startPomodoro()
         case .leisure:
+            stopPomodoro()
+            companion?.onPetModeChanged(mode)
             showBubble("我醒啦！梦里的我可勇敢了！", duration: 3)
             stateUntil = Date()   // 立刻恢复自由行为
+        }
+    }
+
+    /// 需要安静做梦的时期：工作模式，或番茄钟的专注阶段。
+    /// 云雀/蛇/狼彩蛋、戳一戳反应、漫游都以此为准。
+    var isPeaceful: Bool {
+        switch mode {
+        case .leisure: return false
+        case .working: return true
+        case .pomodoro: return pomodoroPhase == .focus
         }
     }
 
@@ -144,9 +179,12 @@ final class PetViewModel: ObservableObject {
         configureReminder()
         scheduleEvents()
         startBatteryMonitor()
-        if mode == .working {
+        switch mode {
+        case .working:
             settleIntoCorner()
-        } else {
+        case .pomodoro:
+            startPomodoro()
+        case .leisure:
             setState(.idle, duration: 3)
         }
     }
@@ -193,8 +231,8 @@ final class PetViewModel: ObservableObject {
     }
 
     private func pickNextState() {
-        // 工作模式：不漫游，回角落继续做梦
-        if mode == .working {
+        // 安静时期（工作模式 / 番茄钟专注中）：不漫游，回角落继续做梦
+        if isPeaceful {
             settleIntoCorner()
             return
         }
@@ -267,7 +305,7 @@ final class PetViewModel: ObservableObject {
     /// 点击/戳一下
     func poke() {
         guard state != .dragged else { return }
-        if mode == .working {
+        if isPeaceful {
             // 被吵醒一下，迷迷糊糊应一声，很快又睡回去
             setState(.happy, duration: 0.8)
             showBubble(Self.workingPokePhrases.randomElement() ?? "哞……", duration: 2.5)
@@ -366,7 +404,7 @@ final class PetViewModel: ObservableObject {
     }
 
     private func checkEvents() {
-        guard mode == .leisure, isVisible else { return }
+        guard !isPeaceful, isVisible else { return }
         let now = Date()
         // 蛇和狼不同时出现：对方还在屏幕上时就延后
         if now >= nextSnakeAt {
@@ -459,12 +497,99 @@ final class PetViewModel: ObservableObject {
         if !charging, percent <= 20, !lowBatteryWarned {
             lowBatteryWarned = true
             showBubble("你快没电了……我也饿得没力气了……记得充电", duration: 5)
-            if mode == .leisure, !isBusyForEvent {
+            if !isPeaceful, !isBusyForEvent {
                 setState(.sitting, duration: 60)   // 没精打采
             }
         }
         if percent > 30 { lowBatteryWarned = false }
         wasCharging = charging
+    }
+
+    // MARK: - 番茄钟
+
+    /// 进入番茄钟：立刻开始第一个专注阶段
+    private func startPomodoro() {
+        pomodoroPhase = .focus
+        completedFocusCount = 0
+        pomodoroPaused = false
+        phaseEndsAt = Date().addingTimeInterval(focusDuration)
+        companion?.onPetModeChanged(.working)   // 专注时豹拉不打扰
+        showBubble("番茄钟开始！专注 25 分钟，我去梦里陪你~", duration: 4)
+        settleIntoCorner()
+        pomodoroTimer?.invalidate()
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated { self.pomodoroTick() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pomodoroTimer = timer
+        pomodoroTick()
+    }
+
+    private func stopPomodoro() {
+        pomodoroTimer?.invalidate()
+        pomodoroTimer = nil
+        pomodoroPaused = false
+        pomodoroCountdown = ""
+        menuBarLabel = "🐮"
+    }
+
+    private func pomodoroTick() {
+        guard mode == .pomodoro else { return }
+        if pomodoroPaused {
+            pomodoroCountdown = "已暂停"
+            return
+        }
+        let remain = max(0, phaseEndsAt.timeIntervalSinceNow)
+        let m = Int(remain) / 60, s = Int(remain) % 60
+        pomodoroCountdown = String(format: "%d:%02d", m, s)
+        menuBarLabel = pomodoroPhase == .focus ? "🐮🍅 \(pomodoroCountdown)" : "🐮☕️ \(pomodoroCountdown)"
+        if remain <= 0 { advancePomodoroPhase() }
+    }
+
+    /// 阶段切换：专注→休息（每 4 轮一次 15 分钟长休息），休息→专注
+    private func advancePomodoroPhase() {
+        switch pomodoroPhase {
+        case .focus:
+            completedFocusCount += 1
+            pomodoroPhase = .rest
+            let longRest = completedFocusCount % 4 == 0
+            phaseEndsAt = Date().addingTimeInterval(longRest ? longRestDuration : restDuration)
+            companion?.onPetModeChanged(.leisure)   // 休息时豹拉可以来玩
+            setState(.happy, duration: 3)
+            showBubble(
+                longRest
+                    ? "哞！四轮专注完成！好好休息 15 分钟，你太棒了！"
+                    : "哞！休息 5 分钟！站起来活动活动，喝口水~",
+                duration: 5
+            )
+        case .rest:
+            pomodoroPhase = .focus
+            phaseEndsAt = Date().addingTimeInterval(focusDuration)
+            companion?.onPetModeChanged(.working)
+            showBubble("继续专注！我去梦里给你加油，待会儿见~", duration: 4)
+            settleIntoCorner()
+        }
+    }
+
+    func togglePomodoroPause() {
+        guard mode == .pomodoro else { return }
+        if pomodoroPaused {
+            pomodoroPaused = false
+            phaseEndsAt = Date().addingTimeInterval(pausedRemaining)
+        } else {
+            pomodoroPaused = true
+            pausedRemaining = max(0, phaseEndsAt.timeIntervalSinceNow)
+            menuBarLabel = "🐮 ⏸"
+        }
+        pomodoroTick()
+    }
+
+    func skipPomodoroPhase() {
+        guard mode == .pomodoro else { return }
+        pomodoroPaused = false
+        advancePomodoroPhase()
+        pomodoroTick()
     }
 
     /// 通过 IOKit 读取内置电池（台式机无电池时返回 nil）

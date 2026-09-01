@@ -9,9 +9,18 @@ struct NiulaiApp: App {
         MenuBarExtra {
             MenuBarContentView(viewModel: appDelegate.pet)
         } label: {
-            Text("🐮")
+            MenuBarLabelView(pet: appDelegate.pet)
         }
         .menuBarExtraStyle(.menu)
+    }
+}
+
+/// 菜单栏图标：番茄钟运行时显示阶段和倒计时
+private struct MenuBarLabelView: View {
+    @ObservedObject var pet: PetViewModel
+
+    var body: some View {
+        Text(pet.menuBarLabel)
     }
 }
 

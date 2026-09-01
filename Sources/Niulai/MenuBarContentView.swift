@@ -12,6 +12,20 @@ struct MenuBarContentView: View {
         Picker("模式", selection: $viewModel.mode) {
             Text("休闲").tag(PetViewModel.PetMode.leisure)
             Text("工作（梦境）").tag(PetViewModel.PetMode.working)
+            Text("番茄钟").tag(PetViewModel.PetMode.pomodoro)
+        }
+
+        if viewModel.mode == .pomodoro {
+            Divider()
+            Text(viewModel.pomodoroPhase == .focus
+                 ? "🍅 专注中 · \(viewModel.pomodoroCountdown)"
+                 : "☕️ 休息中 · \(viewModel.pomodoroCountdown)")
+            Button(viewModel.pomodoroPaused ? "继续番茄钟" : "暂停番茄钟") {
+                viewModel.togglePomodoroPause()
+            }
+            Button(viewModel.pomodoroPhase == .focus ? "提前进入休息" : "提前开始专注") {
+                viewModel.skipPomodoroPhase()
+            }
         }
 
         Divider()

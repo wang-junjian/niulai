@@ -59,9 +59,10 @@ final class CompanionController: ObservableObject {
         disappear()
     }
 
-    /// 工作模式只留牛来一个人做梦，豹拉道别离开；回休闲模式时若「常伴」开着就回来
+    /// 工作模式（含番茄钟专注阶段）只留牛来一个人做梦，豹拉道别离开；
+    /// 回休闲（含番茄钟休息阶段）时若「常伴」开着就回来
     func onPetModeChanged(_ mode: PetViewModel.PetMode) {
-        if mode == .working {
+        if mode != .leisure {
             if present {
                 showBubble("你忙吧，我改天再来找牛来玩~", duration: 2.5)
                 disappear()

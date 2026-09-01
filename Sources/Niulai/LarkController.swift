@@ -44,8 +44,8 @@ final class LarkController: ObservableObject {
     // MARK: - 飞行
 
     private func beginFlight() {
-        // 工作模式下云雀不打扰，过会儿再来看看
-        guard pet.mode == .leisure else {
+        // 安静时期（工作模式 / 番茄钟专注中）云雀不打扰，过会儿再来看看
+        guard !pet.isPeaceful else {
             scheduleNext(after: .random(in: 120...240))
             return
         }
