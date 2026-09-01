@@ -82,7 +82,8 @@ final class LarkController: ObservableObject {
             // 歇在牛来头顶，跟着它走
             window.setFrameOrigin(perchOrigin(on: petWindow))
             if now >= perchUntil {
-                perched = false   // 歇够了，继续飞
+                perched = false
+                willPerch = false   // 歇够了继续飞走，不再回头落第二次
             }
             return
         }

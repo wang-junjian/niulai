@@ -73,7 +73,7 @@ final class CompanionController: ObservableObject {
     }
 
     func appear() {
-        guard !present else { return }
+        guard !present, pet.isVisible else { return }   // 牛来被隐藏时不单独冒出来
         ensureWindow()
         guard let window, let petWindow = pet.window else { return }
         let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
@@ -206,7 +206,11 @@ final class CompanionController: ObservableObject {
 
     func setVisible(_ visible: Bool) {
         if visible {
-            if present { window?.orderFrontRegardless() }
+            if present {
+                window?.orderFrontRegardless()
+            } else if alwaysOn, !pet.isPeaceful {
+                appear()   // 牛来重新显示时，该回来的要回来
+            }
         } else {
             window?.orderOut(nil)
         }
