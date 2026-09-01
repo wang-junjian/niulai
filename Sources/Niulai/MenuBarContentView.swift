@@ -5,6 +5,7 @@ struct MenuBarContentView: View {
     @ObservedObject var viewModel: PetViewModel
 
     @AppStorage("roamingEnabled") private var roamingEnabled = true
+    @AppStorage("reminderMinutes") private var reminderMinutes = 45
     @AppStorage("baolaAlways") private var baolaAlways = false
 
     var body: some View {
@@ -41,6 +42,16 @@ struct MenuBarContentView: View {
             .onChange(of: baolaAlways) {
                 viewModel.companion?.setAlways(baolaAlways)
             }
+
+        Picker("休息提醒", selection: $reminderMinutes) {
+            Text("关闭").tag(0)
+            Text("每 30 分钟").tag(30)
+            Text("每 45 分钟").tag(45)
+            Text("每 1 小时").tag(60)
+        }
+        .onChange(of: reminderMinutes) {
+            viewModel.configureReminder()
+        }
 
         Divider()
 

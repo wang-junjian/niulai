@@ -10,6 +10,7 @@ final class PetViewModel: ObservableObject {
     enum State: Equatable {
         case idle            // 发呆站立
         case walking         // 自由漫步
+        case walkingTo(CGFloat)  // 朝某个 x 坐标走（用于提醒时走到屏幕中间）
         case walkingToSleep(CGFloat) // 走向屏幕角落趴睡（工作模式）
         case sitting         // 坐下
         case sleeping        // 打盹
@@ -65,6 +66,7 @@ final class PetViewModel: ObservableObject {
 
     private let walkSpeed: CGFloat = 55
     private var ticker: Timer?
+    private var reminderTimer: Timer?
     private var lastTick = Date()
     private var stateUntil = Date()
     private var bubbleGeneration = 0
@@ -175,6 +177,13 @@ final class PetViewModel: ObservableObject {
         "（翻身）嘘……梦里正精彩呢"
     ]
 
+    static let reminderPhrases = [
+        "哞！该休息一下啦，喝口水活动活动~",
+        "草原的牛都知道劳逸结合，起来走走吧！",
+        "妈妈说过，坚持就会胜利——先站起来走走！",
+        "休息是为了更好地出发，哞~"
+    ]
+
     // MARK: - 生命周期
 
     func start() {
@@ -185,6 +194,7 @@ final class PetViewModel: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)   // 菜单打开时也保持运行
         ticker = timer
+        configureReminder()
         scheduleEvents()
         startBatteryMonitor()
         switch mode {
@@ -214,6 +224,13 @@ final class PetViewModel: ObservableObject {
         case .walking:
             move(dx: walkSpeed * dt * (facingLeft ? -1 : 1))
             bounceOffScreenEdge(allowHeadbutt: true)   // 偶尔把屏幕边当对手顶两下
+        case .walkingTo(let target):
+            let dir: CGFloat = target > window.frame.minX ? 1 : -1
+            facingLeft = dir < 0
+            move(dx: walkSpeed * 1.6 * dt * dir)
+            if abs(window.frame.minX - target) < 24 {
+                arriveAtReminderSpot()
+            }
         case .walkingToSleep(let target):
             let dir: CGFloat = target > window.frame.minX ? 1 : -1
             facingLeft = dir < 0
@@ -369,6 +386,17 @@ final class PetViewModel: ObservableObject {
     /// 点击/戳一下
     func poke() {
         guard state != .dragged else { return }
+        // 番茄钟专注中被戳：迷迷糊糊报个倒计时（想看时间就问牛来，平时不显示）
+        if mode == .pomodoro, pomodoroPhase == .focus {
+            setState(.happy, duration: 0.8)
+            if pomodoroPaused {
+                showBubble("哞……番茄钟暂停着呢，要继续吗？", duration: 3)
+            } else {
+                let remain = max(0, phaseEndsAt.timeIntervalSinceNow)
+                showBubble(String(format: "哞……还剩 %d:%02d", Int(remain) / 60, Int(remain) % 60), duration: 3)
+            }
+            return
+        }
         if isPeaceful {
             // 被吵醒一下，迷迷糊糊应一声，很快又睡回去
             setState(.happy, duration: 0.8)
@@ -427,6 +455,32 @@ final class PetViewModel: ObservableObject {
         }
     }
 
+    // MARK: - 休息提醒
+
+    /// 读取设置并（重新）安排提醒定时器。reminderMinutes == 0 表示关闭。
+    func configureReminder() {
+        reminderTimer?.invalidate()
+        reminderTimer = nil
+        let minutes = UserDefaults.standard.object(forKey: "reminderMinutes") as? Int ?? 45
+        guard minutes > 0 else { return }
+        reminderTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(minutes * 60), repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated { self.beginReminder() }
+        }
+    }
+
+    private func beginReminder() {
+        guard isVisible, state != .dragged else { return }
+        let target = visibleFrame.midX - (window?.frame.width ?? 240) / 2
+        state = .walkingTo(target)
+        stateUntil = Date().addingTimeInterval(20)   // 兜底：走太久就放弃
+    }
+
+    private func arriveAtReminderSpot() {
+        setState(.happy, duration: 2.5)
+        showBubble(Self.reminderPhrases.randomElement() ?? "休息一下吧~", duration: 6)
+    }
+
     // MARK: - 彩蛋事件（蛇 / 狼影）
 
     private func scheduleEvents() {
@@ -478,7 +532,7 @@ final class PetViewModel: ObservableObject {
     /// 忙碌中（被拎/正在惊吓/正在追蝴蝶等）不触发彩蛋
     private var isBusyForEvent: Bool {
         switch state {
-        case .dragged, .startled, .walkingToSleep, .happy,
+        case .dragged, .startled, .walkingTo, .walkingToSleep, .happy,
              .chasing, .pouncing, .stretching, .headbutting, .spinning, .dizzy:
             return true
         default:
@@ -617,13 +671,17 @@ final class PetViewModel: ObservableObject {
     private func pomodoroTick() {
         guard mode == .pomodoro else { return }
         if pomodoroPaused {
-            pomodoroCountdown = "已暂停"
+            if pomodoroCountdown != "已暂停" { pomodoroCountdown = "已暂停" }
             return
         }
         let remain = max(0, phaseEndsAt.timeIntervalSinceNow)
-        let m = Int(remain) / 60, s = Int(remain) % 60
-        pomodoroCountdown = String(format: "%d:%02d", m, s)
-        menuBarLabel = pomodoroPhase == .focus ? "🐮🍅 \(pomodoroCountdown)" : "🐮☕️ \(pomodoroCountdown)"
+        // 菜单栏图标静态化、菜单内倒计时分钟级：都不每秒变，避免打开的菜单被反复重渲染闪白。
+        // 相同字符串不重复赋值（@Published 每次赋值都触发 objectWillChange）。
+        let label = pomodoroPhase == .focus ? "🐮🍅" : "🐮☕️"
+        if menuBarLabel != label { menuBarLabel = label }
+        let minutes = Int(remain) / 60
+        let text = minutes >= 1 ? "还剩 \(minutes) 分钟" : "不到 1 分钟"
+        if pomodoroCountdown != text { pomodoroCountdown = text }
         if remain <= 0 { advancePomodoroPhase() }
     }
 
