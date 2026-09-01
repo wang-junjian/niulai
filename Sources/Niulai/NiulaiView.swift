@@ -61,11 +61,6 @@ struct NiulaiView: View {
                 lift = -abs(sin(t * 14)) * 10
                 legPhase = 0
                 legSwing = 0
-            } else if case .investigating = state {
-                // 蹑手蹑脚：慢速小步
-                lift = -abs(sin(t * 5)) * 2
-                legPhase = t * 5
-                legSwing = 12
             } else if state == .happy {
                 lift = -abs(sin(t * 9)) * 16
                 legPhase = t * 9

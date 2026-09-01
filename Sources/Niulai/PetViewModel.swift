@@ -16,8 +16,7 @@ final class PetViewModel: ObservableObject {
         case sleeping        // 打盹
         case happy           // 开心（被戳/落地后的短暂反应）
         case dragged         // 被鼠标抓着
-        case startled        // 吓一跳（小绳头/狼影）
-        case investigating(CGFloat)  // 鼓起勇气凑近看（小绳头）
+        case startled        // 吓一跳（蛇/狼影掠过）
     }
 
     /// 休闲：满地漫游；工作：趴角落睡觉做梦，安静不打扰
@@ -45,7 +44,7 @@ final class PetViewModel: ObservableObject {
     weak var window: NSWindow?
     weak var companion: CompanionController?
     weak var lark: LarkController?
-    weak var rope: RopeController?
+    weak var snake: SnakeController?
     weak var wolf: WolfController?
 
     private let walkSpeed: CGFloat = 55
@@ -58,9 +57,8 @@ final class PetViewModel: ObservableObject {
     // 彩蛋事件调度
     private let demoMode = CommandLine.arguments.contains("--demo")
     private var eventTimer: Timer?
-    private var nextRopeAt = Date.distantFuture
+    private var nextSnakeAt = Date.distantFuture
     private var nextWolfAt = Date.distantFuture
-    private var pendingRopeX: CGFloat?
 
     // 电量感知
     private var batteryTimer: Timer?
@@ -180,36 +178,11 @@ final class PetViewModel: ObservableObject {
             if abs(window.frame.minX - target) < 24 {
                 setState(.sleeping, duration: 3600)
             }
-        case .investigating(let ropeX):
-            // 蹑手蹑脚地凑近看
-            let dir: CGFloat = ropeX > window.frame.midX ? 1 : -1
-            facingLeft = dir < 0
-            let step = walkSpeed * 0.55 * dt * dir
-            move(dx: step)
-            bounceOffScreenEdge()
-            if abs(window.frame.midX - ropeX) < 70 {
-                pendingRopeX = nil
-                rope?.dismiss()
-                showBubble("呼……只是根绳子，不怕不怕", duration: 3)
-                setState(.happy, duration: 2)
-            }
         default:
             break
         }
 
-        // 惊吓结束 → 鼓起勇气去查看绳子
-        if state == .startled, now >= stateUntil, let ropeX = pendingRopeX {
-            state = .investigating(ropeX)
-            stateUntil = now.addingTimeInterval(25)
-        }
-
-        // 绳子事件被打断（比如被拎走）：把绳子收走，别留在屏幕上
-        if pendingRopeX != nil, state != .startled, !state.isInvestigating {
-            pendingRopeX = nil
-            rope?.dismiss()
-        }
-
-        if now >= stateUntil, state != .dragged, !state.isInvestigating {
+        if now >= stateUntil, state != .dragged {
             pickNextState()
         }
 
@@ -337,7 +310,7 @@ final class PetViewModel: ObservableObject {
         }
         companion?.setVisible(visible)
         lark?.setVisible(visible)
-        rope?.setVisible(visible)
+        snake?.setVisible(visible)
         wolf?.setVisible(visible)
     }
 
@@ -377,13 +350,13 @@ final class PetViewModel: ObservableObject {
         showBubble(Self.reminderPhrases.randomElement() ?? "休息一下吧~", duration: 6)
     }
 
-    // MARK: - 彩蛋事件（小绳头 / 狼影）
+    // MARK: - 彩蛋事件（蛇 / 狼影）
 
     private func scheduleEvents() {
         let now = Date()
-        // --demo：8 秒后来绳子，25 秒后来狼，方便演示
-        nextRopeAt = now.addingTimeInterval(demoMode ? 8 : .random(in: 300...900))
-        nextWolfAt = now.addingTimeInterval(demoMode ? 25 : .random(in: 600...1500))
+        // --demo：8 秒后来蛇，30 秒后来狼，方便演示
+        nextSnakeAt = now.addingTimeInterval(demoMode ? 8 : .random(in: 300...900))
+        nextWolfAt = now.addingTimeInterval(demoMode ? 30 : .random(in: 600...1500))
         let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             guard let self else { return }
             MainActor.assumeIsolated { self.checkEvents() }
@@ -395,16 +368,17 @@ final class PetViewModel: ObservableObject {
     private func checkEvents() {
         guard mode == .leisure, isVisible else { return }
         let now = Date()
-        if now >= nextRopeAt {
-            if isBusyForEvent {
-                nextRopeAt = now.addingTimeInterval(20)   // 忙就 20 秒后再试
+        // 蛇和狼不同时出现：对方还在屏幕上时就延后
+        if now >= nextSnakeAt {
+            if isBusyForEvent || wolf?.running == true {
+                nextSnakeAt = now.addingTimeInterval(20)   // 忙就 20 秒后再试
             } else {
-                nextRopeAt = now.addingTimeInterval(.random(in: 300...900))
-                triggerRopeEvent()
+                nextSnakeAt = now.addingTimeInterval(.random(in: 300...900))
+                triggerSnakeEvent()
             }
         }
         if now >= nextWolfAt {
-            if isBusyForEvent {
+            if isBusyForEvent || snake?.running == true {
                 nextWolfAt = now.addingTimeInterval(20)
             } else {
                 nextWolfAt = now.addingTimeInterval(.random(in: 600...1500))
@@ -416,21 +390,29 @@ final class PetViewModel: ObservableObject {
     /// 忙碌中（被拎/正在惊吓/正在赶路）不触发彩蛋
     private var isBusyForEvent: Bool {
         switch state {
-        case .dragged, .startled, .investigating, .walkingTo, .walkingToSleep, .happy:
+        case .dragged, .startled, .walkingTo, .walkingToSleep, .happy:
             return true
         default:
             return false
         }
     }
 
-    private func triggerRopeEvent() {
-        guard !isBusyForEvent, let rope, let window else { return }
-        rope.spawn(nearPet: window.frame)
-        pendingRopeX = rope.centerX
-        facingLeft = rope.centerX < window.frame.midX
-        setState(.startled, duration: 1.6)
-        showBubble("啊！是小绳头！！", duration: 1.8)
+    private func triggerSnakeEvent() {
+        guard !isBusyForEvent, let snake, let window else { return }
+        let fromLeft = Bool.random()
+        snake.slitherAcross(fromLeft: fromLeft, groundY: window.frame.minY)
+        facingLeft = fromLeft
+        setState(.startled, duration: 2.0)
+        showBubble("蛇……蛇！！", duration: 2)
         companion?.onPetStartled()
+        snake.onExit = { [weak self] in
+            MainActor.assumeIsolated { self?.afterSnake() }
+        }
+    }
+
+    private func afterSnake() {
+        showBubble("呼……爬走了爬走了，我不怕", duration: 3)
+        setState(.happy, duration: 1.5)
     }
 
     private func triggerWolfEvent() {
@@ -496,12 +478,5 @@ final class PetViewModel: ObservableObject {
               let charging = desc[kIOPSIsChargingKey] as? Bool
         else { return nil }
         return (capacity, charging)
-    }
-}
-
-private extension PetViewModel.State {
-    var isInvestigating: Bool {
-        if case .investigating = self { return true }
-        return false
     }
 }
