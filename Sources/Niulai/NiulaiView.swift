@@ -132,7 +132,8 @@ struct NiulaiView: View {
             }
 
             // 前倾：追蝴蝶/扑蝶时朝目标探身，顶墙时低头用角
-            buttLunge = state == .headbutting ? abs(sin(elapsed * 2.9)) : 0
+            // 顶墙只顶一次：单次前冲脉冲（顶出去→收回来）
+            buttLunge = state == .headbutting ? sin(min(elapsed / 0.7, 1) * .pi) : 0
             switch state {
             case .chasing: lean = 6
             case .pouncing: lean = 8

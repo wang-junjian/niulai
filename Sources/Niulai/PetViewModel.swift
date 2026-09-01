@@ -261,11 +261,11 @@ final class PetViewModel: ObservableObject {
                     pickNextState()
                 }
             case .spinning:
-                setState(.dizzy, duration: 1.8)   // 转晕了
-            case .dizzy:
-                setState(.sitting, duration: .random(in: 4...8))   // 晕完坐地上缓缓
+                setState(.sitting, duration: .random(in: 3...6))   // 转完坐下歇会儿
             case .headbutting:
-                facingLeft = !facingLeft   // 顶完掉头就走
+                setState(.dizzy, duration: 1.8)   // 顶到墙，把自己撞晕了
+            case .dizzy:
+                facingLeft = !facingLeft   // 晕完掉头就走
                 setState(.walking, duration: .random(in: 4...8))
             case .pouncing:
                 // 扑空了，若无其事
@@ -365,7 +365,7 @@ final class PetViewModel: ObservableObject {
     }
 
     private func enterHeadbutt() {
-        setState(.headbutting, duration: 2.2)
+        setState(.headbutting, duration: 1.3)   // 低头顶一下，把自己顶晕
         if Double.random(in: 0..<1) < 0.5 {
             showBubble("哞！这堵墙跟我较劲！", duration: 2.2)
         }
