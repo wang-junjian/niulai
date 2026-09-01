@@ -8,6 +8,17 @@ final class ButterflyController: ObservableObject {
 
     @Published var flying = false
     @Published var facingLeft = false
+    @Published private(set) var wingNear = ButterflyController.colorSchemes[0].near
+    @Published private(set) var wingFar = ButterflyController.colorSchemes[0].far
+
+    /// 每次出场随机选一种配色（近翅/远翅）
+    nonisolated static let colorSchemes: [(near: Color, far: Color)] = [
+        (Color(red: 0.96, green: 0.60, blue: 0.32), Color(red: 0.84, green: 0.44, blue: 0.24)),  // 橘粉
+        (Color(red: 0.55, green: 0.65, blue: 0.95), Color(red: 0.40, green: 0.48, blue: 0.82)),  // 蓝紫
+        (Color(red: 0.98, green: 0.82, blue: 0.35), Color(red: 0.88, green: 0.66, blue: 0.22)),  // 明黄
+        (Color(red: 0.55, green: 0.85, blue: 0.65), Color(red: 0.38, green: 0.70, blue: 0.50)),  // 薄荷
+        (Color(red: 0.95, green: 0.55, blue: 0.68), Color(red: 0.82, green: 0.38, blue: 0.52)),  // 粉红
+    ]
 
     weak var pet: PetViewModel?
 
@@ -37,6 +48,9 @@ final class ButterflyController: ObservableObject {
 
         direction = fromLeft ? 1 : -1
         facingLeft = !fromLeft
+        let scheme = Self.colorSchemes.randomElement() ?? Self.colorSchemes[0]
+        wingNear = scheme.near
+        wingFar = scheme.far
         baseY = groundY + 95   // 牛来脑袋的高度，跳一跳够得着
         flyTime = 0
         escaping = false
@@ -103,6 +117,12 @@ final class ButterflyController: ObservableObject {
         if !visible { window?.orderOut(nil) }
     }
 
+    /// 预览/调试用：直接指定配色
+    func setSchemeForPreview(_ scheme: (near: Color, far: Color)) {
+        wingNear = scheme.near
+        wingFar = scheme.far
+    }
+
     private func ensureWindow() {
         guard window == nil else { return }
         let w = NSWindow(
@@ -124,7 +144,8 @@ final class ButterflyController: ObservableObject {
     }
 }
 
-/// 小蝴蝶（侧视朝右飞）：橘粉色四片翅膀快速扇动，深色细身子，卷卷触角。
+/// 小蝴蝶（侧视朝右飞）：水平细身体，上下两瓣翅膀绕根部快速扇动，
+/// 卷卷触角朝前。翅膀配色由 controller 每次出场随机指定。
 struct ButterflyView: View {
     @ObservedObject var controller: ButterflyController
 
@@ -140,68 +161,66 @@ struct ButterflyView: View {
         }
     }
 
-    private let wingNear = Color(red: 0.96, green: 0.60, blue: 0.32)   // 橘粉近翅
-    private let wingFar  = Color(red: 0.84, green: 0.44, blue: 0.24)   // 远翅深色
-    private let dark     = Color(red: 0.25, green: 0.18, blue: 0.12)
+    private let dark = Color(red: 0.25, green: 0.18, blue: 0.12)
 
     private func drawButterfly(in ctx: GraphicsContext, flap: CGFloat) {
-        let bodyX: CGFloat = 35   // 身体中线
+        let attach = CGPoint(x: 40, y: 31)   // 翅膀根部（身体上侧）
 
-        // 远侧翅膀（先画，压在近翅下面）
-        drawWing(in: ctx, bodyX: bodyX, flap: flap, far: true)
+        // 远侧翅膀（深色偏小，先画压在下面）
+        drawWings(in: ctx, attach: attach, flap: flap, far: true)
 
-        // 身体 + 头
+        // 身体：水平胶囊 + 头部圆点（朝右）
         ctx.fill(
-            Path(roundedRect: CGRect(x: bodyX - 2.5, y: 22, width: 5, height: 18), cornerRadius: 2.5),
+            Path(roundedRect: CGRect(x: 30, y: 29, width: 20, height: 5.5), cornerRadius: 2.75),
             with: .color(dark)
         )
-        ctx.fill(Path(ellipseIn: CGRect(x: bodyX - 3.5, y: 16, width: 7, height: 7)), with: .color(dark))
+        ctx.fill(Path(ellipseIn: CGRect(x: 46, y: 26.5, width: 7, height: 7)), with: .color(dark))
 
-        // 卷卷触角
-        for side in [-1.0, 1.0] {
+        // 触角：从头顶向前伸出的短须，末端小圆球
+        for dy in [0.0, 3.0] {
             var antenna = Path()
-            antenna.move(to: CGPoint(x: bodyX + side, y: 17))
+            antenna.move(to: CGPoint(x: 50.5, y: 28 + dy))
             antenna.addQuadCurve(
-                to: CGPoint(x: bodyX + side * 6 + 3, y: 9),
-                control: CGPoint(x: bodyX + side * 5 + 2, y: 13)
+                to: CGPoint(x: 56, y: 23.5 + dy),
+                control: CGPoint(x: 54, y: 25 + dy)
             )
             ctx.stroke(antenna, with: .color(dark), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-            ctx.fill(
-                Path(ellipseIn: CGRect(x: bodyX + side * 6 + 1.5, y: 7, width: 3, height: 3)),
-                with: .color(dark)
-            )
+            ctx.fill(Path(ellipseIn: CGRect(x: 54.8, y: 22.3 + dy, width: 2.6, height: 2.6)), with: .color(dark))
         }
 
         // 近侧翅膀（亮色带斑点）
-        drawWing(in: ctx, bodyX: bodyX, flap: flap, far: false)
+        drawWings(in: ctx, attach: attach, flap: flap, far: false)
     }
 
-    /// 画一侧上下两片翅膀，绕身体中线纵向开合模拟扇动
-    private func drawWing(in ctx: GraphicsContext, bodyX: CGFloat, flap: CGFloat, far: Bool) {
-        let color = far ? wingFar : wingNear
-        let inset: CGFloat = far ? 5 : 0   // 远翅略小
+    /// 上下两瓣翅膀，绕根部纵向开合模拟扇动；远翅小一号、位置略靠后
+    private func drawWings(in ctx: GraphicsContext, attach: CGPoint, flap: CGFloat, far: Bool) {
+        let color = far ? controller.wingFar : controller.wingNear
+        let back: CGFloat = far ? 4 : 0    // 远翅靠后
+        let shrink: CGFloat = far ? 4 : 0  // 远翅缩小
         ctx.drawLayer { layer in
-            layer.translateBy(x: bodyX, y: 28)
+            layer.translateBy(x: attach.x, y: attach.y)
             layer.scaleBy(x: 1, y: flap)
-            layer.translateBy(x: -bodyX, y: -28)
-            // 上翅：大圆瓣
+            layer.translateBy(x: -attach.x, y: -attach.y)
+            // 上翅：向后上方展开的大圆瓣
             layer.fill(
-                Path(ellipseIn: CGRect(x: bodyX - 24 + inset, y: 6 + inset, width: 23 - inset, height: 22 - inset)),
+                Path(ellipseIn: CGRect(x: attach.x - 31 - back, y: attach.y - 26 + shrink,
+                                       width: 28 - shrink, height: 22 - shrink)),
                 with: .color(color)
             )
-            // 下翅：小圆瓣
+            // 下翅：向后下方的小圆瓣
             layer.fill(
-                Path(ellipseIn: CGRect(x: bodyX - 18 + inset, y: 27, width: 17 - inset, height: 15 - inset)),
+                Path(ellipseIn: CGRect(x: attach.x - 22 - back, y: attach.y + 3,
+                                       width: 18 - shrink, height: 14 - shrink)),
                 with: .color(color)
             )
             if !far {
                 // 近翅白色斑点
                 layer.fill(
-                    Path(ellipseIn: CGRect(x: bodyX - 19, y: 11, width: 5, height: 5)),
+                    Path(ellipseIn: CGRect(x: attach.x - 25, y: attach.y - 20, width: 5, height: 5)),
                     with: .color(.white.opacity(0.85))
                 )
                 layer.fill(
-                    Path(ellipseIn: CGRect(x: bodyX - 13, y: 31, width: 3.5, height: 3.5)),
+                    Path(ellipseIn: CGRect(x: attach.x - 16, y: attach.y + 7, width: 3.5, height: 3.5)),
                     with: .color(.white.opacity(0.85))
                 )
             }

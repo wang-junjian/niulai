@@ -234,10 +234,13 @@ final class PetViewModel: ObservableObject {
                 butterflyGone()
                 break
             }
-            let target = butterfly.currentX - window.frame.width / 2
-            let dir: CGFloat = target > window.frame.minX ? 1 : -1
-            facingLeft = dir < 0
-            move(dx: walkSpeed * 2.2 * dt * dir)
+            // 死区：追到蝴蝶正下方附近就稳住朝向不再横跳（否则每帧翻转闪烁）
+            let dx = butterfly.currentX - window.frame.midX
+            if abs(dx) > 24 {
+                facingLeft = dx < 0
+                let step = min(walkSpeed * 2.2 * dt, abs(dx))
+                move(dx: dx > 0 ? step : -step)
+            }
             bounceOffScreenEdge()
         case .pouncing:
             // 向前小跳一步
