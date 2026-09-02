@@ -2,69 +2,19 @@ import AppKit
 import SwiftUI
 
 /// 蛇：贴着地面蜿蜒爬过屏幕。纯视觉威胁，不响应鼠标。
+/// 移动骨架在 ScreenCrosser 基类；这里只剩速度和外壳。
 @MainActor
-final class SnakeController: ObservableObject {
+final class SnakeController: ScreenCrosser {
 
-    @Published var running = false
-    @Published var facingLeft = false
-
-    private var window: NSWindow?
-    private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
-    private var direction: CGFloat = 1
-
-    /// 蛇爬出屏幕后回调（牛来用于说感想）
-    var onExit: (() -> Void)?
-
-    static let size = NSSize(width: 170, height: 70)
-    private let crawlSpeed: CGFloat = 110
-
-    nonisolated init() {}
+    override class var size: NSSize { NSSize(width: 170, height: 70) }
+    override var speed: CGFloat { 110 }
 
     func slitherAcross(fromLeft: Bool, groundY: CGFloat) {
-        ensureWindow()
-        guard let window else { return }
-        let vf = ScreenGeometry.visibleFrame(of: window)
-
-        direction = fromLeft ? 1 : -1
-        facingLeft = !fromLeft
-        window.setFrameOrigin(NSPoint(
-            x: fromLeft ? vf.minX - Self.size.width : vf.maxX,
-            y: groundY
-        ))
-        running = true
-        window.orderFrontRegardless()
-        ticker.start()
+        startCrossing(fromLeft: fromLeft, groundY: groundY)
     }
 
-    private func tick(dt: CGFloat) {
-        guard running, let window else { return }
-        let vf = ScreenGeometry.visibleFrame(of: window)
-
-        var origin = window.frame.origin
-        origin.x += direction * crawlSpeed * dt
-        window.setFrameOrigin(origin)
-
-        if origin.x > vf.maxX + 10 || origin.x + Self.size.width < vf.minX - 10 {
-            running = false
-            window.orderOut(nil)
-            ticker.stop()
-            let callback = onExit
-            onExit = nil
-            callback?()
-        }
-    }
-
-    func setVisible(_ visible: Bool) {
-        if !visible { window?.orderOut(nil) }
-    }
-
-    private func ensureWindow() {
-        guard window == nil else { return }
-        window = WindowFactory.makeFloatingWindow(
-            size: Self.size,
-            ignoresMouseEvents: true,   // 纯视觉威胁，不挡点击
-            rootView: SnakeView(controller: self)
-        )
+    override func makeContentView() -> AnyView {
+        AnyView(SnakeView(controller: self))
     }
 }
 
