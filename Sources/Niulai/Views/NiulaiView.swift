@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 用 SwiftUI Canvas 纯代码绘制的「牛来」——电影直立版形象。
 /// 正面视角：橙黄身体、标志性灰白大嘴套、细眉耷拉眼的丧萌表情。
@@ -9,7 +10,8 @@ struct NiulaiView: View {
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            let p = AnimationParams(state: viewModel.state, t: t, elapsed: viewModel.stateElapsed)
+            let p = AnimationParams(state: viewModel.state, t: t, elapsed: viewModel.stateElapsed,
+                                    pupil: pupilOffset())
 
             ZStack {
                 Canvas { ctx, _ in
@@ -43,6 +45,45 @@ struct NiulaiView: View {
         }
     }
 
+    /// 瞳孔看向（画布坐标：+x 永远是面朝方向，画布翻转已处理镜像）
+    /// 追蝴蝶盯蝴蝶、被拎盯鼠标、发呆/坐着时瞟鼠标（xeyes 式）、走路看前方
+    private func pupilOffset() -> CGSize {
+        let state = viewModel.state
+        var dx: CGFloat = 0
+        var dy: CGFloat = 0
+        switch state {
+        case .chasing, .pouncing:
+            if let butterfly = viewModel.butterfly, butterfly.running, let window = viewModel.window {
+                let screenDX = butterfly.currentX - window.frame.midX
+                dx = max(-2.2, min(2.2, screenDX / 120))
+                dy = -1.2   // 蝴蝶在头顶上方
+            }
+        case .dragged:
+            if let window = viewModel.window {
+                let m = NSEvent.mouseLocation
+                dx = max(-2.5, min(2.5, (m.x - window.frame.midX) / 150))
+                dy = max(-1.2, min(1.2, -(m.y - window.frame.midY) / 200))
+            }
+        case .idle, .sitting:
+            // 发呆/坐着时瞟鼠标（安静期牛来在睡觉，用不上）
+            if !viewModel.isPeaceful, let window = viewModel.window {
+                let m = NSEvent.mouseLocation
+                dx = max(-2.0, min(2.0, (m.x - window.frame.midX) / 200))
+            }
+        case .walking:
+            dx = 1.5   // 画布 +x 即面朝方向
+        default:
+            break
+        }
+        // chasing/dragged/idle 的 dx 算的是屏幕方向，画布翻转时要翻回来
+        let isScreenDirection: Bool = switch state {
+        case .walking: false
+        default: true
+        }
+        if isScreenDirection, viewModel.facingLeft { dx = -dx }
+        return CGSize(width: dx, height: dy)
+    }
+
     // MARK: - 动画参数
 
     struct AnimationParams {
@@ -60,11 +101,13 @@ struct NiulaiView: View {
         let dizzyEyes: Bool    // 眩晕螺旋眼
         let happyMouth: Bool   // 开心时张嘴笑
         let wideEyes: Bool     // 被拎着时瞪大眼睛
+        let pupil: CGSize      // 瞳孔偏移（看向目标）
         let armRaise: CGFloat  // 手臂上举程度 0-1（被拎=1，伸懒腰=渐入渐出）
         let spinFlip: Bool     // 转圈追尾巴时的左右翻转
         let tailWag: CGFloat   // 尾巴摆动角度（牛来正面视角不可见，供豹拉复用）
 
-        init(state: PetViewModel.State, t: TimeInterval, elapsed: TimeInterval) {
+        init(state: PetViewModel.State, t: TimeInterval, elapsed: TimeInterval,
+             pupil: CGSize = .zero, blinkSeed: UInt32 = 7) {
             let isWalking = state == .walking || state.isWalkingTo
 
             // 走路：小碎步弹跳 + 四肢摆动；开心：原地跳
@@ -141,9 +184,9 @@ struct NiulaiView: View {
             default: lean = 0
             }
 
-            // 每 4.3 秒眨一次眼（睡觉、被拎、惊吓时不眨）
-            let cycle = t.truncatingRemainder(dividingBy: 4.3)
-            blinking = cycle < 0.12 && state != .sleeping && state != .dragged && state != .startled
+            // 不规则眨眼（2.5~6s 随机间隔、偶尔连眨；睡觉、被拎、惊吓时不眨）
+            blinking = EyeBlink.isClosed(at: t, seed: blinkSeed)
+                && state != .sleeping && state != .dragged && state != .startled
 
             yawning = state == .stretching && elapsed < 1.2
             dizzyEyes = state == .dizzy
@@ -157,6 +200,7 @@ struct NiulaiView: View {
             let wagSpeed = (state == .happy || isWalking) ? 6.0 : 2.2
             let wagAmount: CGFloat = (state == .happy) ? 16 : 8
             tailWag = sin(t * wagSpeed) * wagAmount
+            self.pupil = pupil
         }
     }
 
@@ -242,11 +286,13 @@ struct NiulaiView: View {
             for cx in [108.0, 132.0] {
                 ctx.fill(Path(ellipseIn: CGRect(x: cx - 8, y: 50, width: 16, height: 13)), with: .color(.white))
                 let r: CGFloat = p.wideEyes ? 4.5 : 3.5
+                // 瞳孔带看向偏移（高光跟着走）；耷拉眼皮不动，丧萌底色保住
+                let px = cx + p.pupil.width, py = 58 + p.pupil.height
                 ctx.fill(
-                    Path(ellipseIn: CGRect(x: cx - r, y: 58 - r, width: r * 2, height: r * 2)),
+                    Path(ellipseIn: CGRect(x: px - r, y: py - r, width: r * 2, height: r * 2)),
                     with: .color(Palette.dark)
                 )
-                ctx.fill(Path(ellipseIn: CGRect(x: cx - 1, y: 54.5, width: 2.2, height: 2.2)), with: .color(.white))
+                ctx.fill(Path(ellipseIn: CGRect(x: px - 1, y: py - 3.5, width: 2.2, height: 2.2)), with: .color(.white))
                 if !p.wideEyes {
                     // 耷拉的眼皮：用身体色盖住眼睛上半
                     ctx.fill(

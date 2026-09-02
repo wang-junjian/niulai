@@ -12,7 +12,7 @@ struct LarkView: View {
             let bob: CGFloat = controller.perched ? sin(t * 2) * 1.5 : sin(t * 6) * 4
 
             Canvas { ctx, _ in
-                drawLark(in: ctx, flapDegrees: flap)
+                drawLark(in: ctx, flapDegrees: flap, blinking: EyeBlink.isClosed(at: t, seed: 29))
             }
             .scaleEffect(x: controller.facingLeft ? -1 : 1)
             .offset(y: bob)
@@ -27,7 +27,7 @@ struct LarkView: View {
         static let dark    = Color(red: 0.22, green: 0.16, blue: 0.12)
     }
 
-    private func drawLark(in ctx: GraphicsContext, flapDegrees: Double) {
+    private func drawLark(in ctx: GraphicsContext, flapDegrees: Double, blinking: Bool) {
         // 尾羽
         for (angle, len) in [(-8.0, 20.0), (4.0, 18.0)] {
             ctx.drawLayer { layer in
@@ -48,9 +48,16 @@ struct LarkView: View {
         // 头
         ctx.fill(Path(ellipseIn: CGRect(x: 66, y: 24, width: 24, height: 24)), with: .color(Palette.feather))
 
-        // 眼睛
-        ctx.fill(Path(ellipseIn: CGRect(x: 76, y: 31, width: 5, height: 5)), with: .color(Palette.dark))
-        ctx.fill(Path(ellipseIn: CGRect(x: 77.2, y: 32.2, width: 1.6, height: 1.6)), with: .color(.white))
+        // 眼睛（眨眼时收成一条弧线）
+        if blinking {
+            var closed = Path()
+            closed.move(to: CGPoint(x: 75.5, y: 33))
+            closed.addQuadCurve(to: CGPoint(x: 81.5, y: 33), control: CGPoint(x: 78.5, y: 36))
+            ctx.stroke(closed, with: .color(Palette.dark), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+        } else {
+            ctx.fill(Path(ellipseIn: CGRect(x: 76, y: 31, width: 5, height: 5)), with: .color(Palette.dark))
+            ctx.fill(Path(ellipseIn: CGRect(x: 77.2, y: 32.2, width: 1.6, height: 1.6)), with: .color(.white))
+        }
 
         // 喙
         var beak = Path()

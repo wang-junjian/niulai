@@ -23,6 +23,9 @@ final class CompanionController: ObservableObject {
 
     static let size = NSSize(width: 200, height: 250)
 
+    /// 窗口中心 x（豹拉的眼神定位用）
+    var midX: CGFloat? { window?.frame.midX }
+
     static let pokePhrases = [
         "嗷呜~",
         "我会保护牛来的！",

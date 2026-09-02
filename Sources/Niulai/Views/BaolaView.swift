@@ -8,7 +8,8 @@ struct BaolaView: View {
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            let p = NiulaiView.AnimationParams(state: controller.state, t: t, elapsed: 0)
+            let p = NiulaiView.AnimationParams(state: controller.state, t: t, elapsed: 0,
+                                               pupil: pupilOffset(), blinkSeed: 13)
 
             ZStack {
                 Canvas { ctx, _ in
@@ -30,6 +31,19 @@ struct BaolaView: View {
                 }
             }
         }
+    }
+
+    /// 瞳孔看向：护卫时盯狼，平时看着牛来（朋友的眼神）
+    private func pupilOffset() -> CGSize {
+        guard let midX = controller.midX else { return .zero }
+        // 护卫位优先：盯着狼；否则盯着牛来
+        let targetX: CGFloat? = controller.pet.wolf?.running == true
+            ? controller.pet.wolf?.currentX
+            : controller.pet.window?.frame.midX
+        guard let targetX else { return .zero }
+        let screenDX = max(-1.8, min(1.8, (targetX - midX) / 120))
+        // 画布 +x 即面朝方向：屏幕方向的偏移在翻转画布下要翻回来
+        return CGSize(width: controller.facingLeft ? -screenDX : screenDX, height: 0)
     }
 
     enum Palette {
@@ -102,8 +116,10 @@ struct BaolaView: View {
             }
         } else {
             for cx in [88.0, 112.0] {
-                ctx.fill(Path(ellipseIn: CGRect(x: cx - 5.5, y: 46, width: 11, height: 11)), with: .color(Palette.dark))
-                ctx.fill(Path(ellipseIn: CGRect(x: cx - 3.5, y: 47.5, width: 3.2, height: 3.2)), with: .color(.white))
+                // 纯深色大眼：整颗眼珠连高光一起偏移
+                let px = cx + p.pupil.width
+                ctx.fill(Path(ellipseIn: CGRect(x: px - 5.5, y: 46, width: 11, height: 11)), with: .color(Palette.dark))
+                ctx.fill(Path(ellipseIn: CGRect(x: px - 3.5, y: 47.5, width: 3.2, height: 3.2)), with: .color(.white))
             }
         }
 

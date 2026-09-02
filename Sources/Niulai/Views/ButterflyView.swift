@@ -13,7 +13,7 @@ struct ButterflyView: View {
             let flap = 0.30 + 0.70 * abs(sin(t * 15))   // 翅膀开合比例
 
             Canvas { ctx, _ in
-                drawButterfly(in: ctx, flap: flap)
+                drawButterfly(in: ctx, flap: flap, t: t)
             }
             .scaleEffect(x: controller.facingLeft ? -1 : 1)
         }
@@ -31,7 +31,7 @@ struct ButterflyView: View {
 
     // MARK: - 绘制
 
-    private func drawButterfly(in ctx: GraphicsContext, flap: CGFloat) {
+    private func drawButterfly(in ctx: GraphicsContext, flap: CGFloat, t: TimeInterval) {
         let s = controller.scheme
 
         // 远侧翅膀（深色小一号，压在最底）
@@ -87,12 +87,23 @@ struct ButterflyView: View {
         // 大头
         ctx.fill(Path(ellipseIn: CGRect(x: 56, y: 24, width: 30, height: 30)), with: .color(cream))
 
-        // 大眼睛（白底 + 蓝瞳 + 高光）
-        ctx.fill(Path(ellipseIn: CGRect(x: 66, y: 28, width: 15, height: 16)), with: .color(.white))
-        ctx.fill(Path(ellipseIn: CGRect(x: 68.5, y: 31, width: 10, height: 10.5)),
-                 with: .color(Color(red: 0.35, green: 0.55, blue: 0.90)))
-        ctx.fill(Path(ellipseIn: CGRect(x: 70.5, y: 33, width: 6, height: 6.5)), with: .color(dark))
-        ctx.fill(Path(ellipseIn: CGRect(x: 69.5, y: 31.5, width: 3, height: 3)), with: .color(.white))
+        // 大眼睛（白底 + 蓝瞳 + 高光）；被牛来追时瞳孔收缩、回头瞟；也会眨眼
+        if EyeBlink.isClosed(at: t, seed: 41) {
+            var closed = Path()
+            closed.move(to: CGPoint(x: 67, y: 36))
+            closed.addQuadCurve(to: CGPoint(x: 80, y: 36), control: CGPoint(x: 73.5, y: 41))
+            ctx.stroke(closed, with: .color(dark), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        } else {
+            let panic = controller.panicked
+            let pupilShift: CGFloat = panic ? -2.5 : 0   // 回头看追兵（画布朝右，身后是 -x）
+            ctx.fill(Path(ellipseIn: CGRect(x: 66, y: 28, width: 15, height: 16)), with: .color(.white))
+            ctx.fill(Path(ellipseIn: CGRect(x: 68.5 + pupilShift, y: 31, width: 10, height: 10.5)),
+                     with: .color(Color(red: 0.35, green: 0.55, blue: 0.90)))
+            let pr: CGFloat = panic ? 4.2 : 6   // 紧张时瞳孔收缩
+            ctx.fill(Path(ellipseIn: CGRect(x: 70.5 + pupilShift + (6 - pr) / 2, y: 33 + (6.5 - pr) / 2,
+                                            width: pr, height: pr)), with: .color(dark))
+            ctx.fill(Path(ellipseIn: CGRect(x: 69.5 + pupilShift, y: 31.5, width: 3, height: 3)), with: .color(.white))
+        }
 
         // 微笑 + 腮红
         var smile = Path()

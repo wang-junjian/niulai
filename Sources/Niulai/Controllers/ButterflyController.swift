@@ -53,6 +53,9 @@ final class ButterflyController: ScreenCrosser {
     private let chasedSpeed: CGFloat = 180   // 被追时明显加速：相对牛来（121）每秒拉开约 60px，几秒内甩掉
     private let escapeSpeed: CGFloat = 260   // 被扑中后的全力逃走，全场最快
 
+    /// 被牛来盯上（还没被扑）：眼睛紧张，瞳孔收缩后瞟
+    var panicked: Bool { pet?.state == .chasing && !escaping }
+
     func flyAcross(fromLeft: Bool, groundY: CGFloat) {
         startCrossing(fromLeft: fromLeft, groundY: groundY, referenceWindow: pet?.window)
     }
