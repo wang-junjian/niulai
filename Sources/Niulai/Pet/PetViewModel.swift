@@ -48,7 +48,7 @@ final class PetViewModel: ObservableObject {
         }
     }
 
-    @Published private(set) var state: State = .idle
+    @Published var state: State = .idle   // 仅 PetViewModel* 扩展内可写（注释约定）
     @Published var facingLeft = false
     @Published var bubbleText: String?
     @Published var isVisible = true
@@ -67,17 +67,17 @@ final class PetViewModel: ObservableObject {
     private let walkSpeed: CGFloat = 55
     private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
     /// 休息提醒：分钟级，间隔随设置变化，每次 configureReminder 重建
-    private var reminderTicker: FrameTicker?
-    private var stateUntil = Date()
+    var reminderTicker: FrameTicker?   // internal: +Reminder 写
+    var stateUntil = Date()   // internal: +Reminder/+Events 写
     private var bubbleGeneration = 0
 
     // 彩蛋事件调度
     let demoMode = CommandLine.arguments.contains("--demo")   // internal: +Pomodoro/+Events 用
 
     // 电量感知
-    private lazy var batteryTicker = FrameTicker(interval: 30) { [weak self] _ in self?.checkBattery() }
-    private var wasCharging = false
-    private var lowBatteryWarned = false
+    lazy var batteryTicker = FrameTicker(interval: 30) { [weak self] _ in self?.checkBattery() }
+    var wasCharging = false   // internal: +Reminder 写
+    var lowBatteryWarned = false   // internal: +Reminder 写
 
     // 梦到妈妈彩蛋：休闲模式每次入睡掷签，抽中的觉睡到中途必然触发（一觉最多一次）
     private var mamaDreamArmed = false
@@ -316,7 +316,7 @@ final class PetViewModel: ObservableObject {
 
     // MARK: - 窗口移动
 
-    private var visibleFrame: NSRect {
+    var visibleFrame: NSRect {   // internal: +Reminder/+Mode 用
         ScreenGeometry.visibleFrame(
             of: window,
             fallback: NSRect(x: 0, y: 0, width: 1440, height: 900)   // 锁屏时坐标可能是垃圾值，兜底
@@ -429,70 +429,5 @@ final class PetViewModel: ObservableObject {
         } else {
             setState(.sitting, duration: 3600)
         }
-    }
-
-    // MARK: - 休息提醒
-
-    /// 读取设置并（重新）安排提醒定时器。reminderMinutes == 0 表示关闭。
-    func configureReminder() {
-        reminderTicker?.stop()
-        reminderTicker = nil
-        let minutes = Settings.reminderMinutes
-        guard minutes > 0 else { return }
-        let ticker = FrameTicker(interval: TimeInterval(minutes * 60)) { [weak self] _ in
-            self?.beginReminder()
-        }
-        ticker.start()
-        reminderTicker = ticker
-    }
-
-    private func beginReminder() {
-        guard isVisible, state != .dragged else { return }
-        let target = visibleFrame.midX - (window?.frame.width ?? 240) / 2
-        state = .walkingTo(target)
-        stateUntil = Date().addingTimeInterval(20)   // 兜底：走太久就放弃
-    }
-
-    private func arriveAtReminderSpot() {
-        setState(.happy, duration: 2.5)
-        showBubble(Self.reminderPhrases.randomElement() ?? "休息一下吧~", duration: 6)
-    }
-
-    // MARK: - 电量感知
-
-    private func startBatteryMonitor() {
-        checkBattery()
-        batteryTicker.start()
-    }
-
-    private func checkBattery() {
-        guard let (percent, charging) = Self.readBattery() else { return }
-
-        if charging, !wasCharging {
-            setState(.happy, duration: 1.5)
-            showBubble("来电啦！⚡ 满血复活！", duration: 3)
-        }
-        if !charging, percent <= 20, !lowBatteryWarned {
-            lowBatteryWarned = true
-            showBubble("你快没电了……我也饿得没力气了……记得充电", duration: 5)
-            if !isPeaceful, !isBusyForEvent {
-                setState(.sitting, duration: 60)   // 没精打采
-            }
-        }
-        if percent > 30 { lowBatteryWarned = false }
-        wasCharging = charging
-    }
-
-    /// 通过 IOKit 读取内置电池（台式机无电池时返回 nil）
-    private static func readBattery() -> (percent: Int, charging: Bool)? {
-        guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
-              let source = sources.first,
-              let desc = IOPSGetPowerSourceDescription(snapshot, source)?.takeUnretainedValue() as? [String: Any],
-              (desc[kIOPSTypeKey] as? String) == kIOPSInternalBatteryType,
-              let capacity = desc[kIOPSCurrentCapacityKey] as? Int,
-              let charging = desc[kIOPSIsChargingKey] as? Bool
-        else { return nil }
-        return (capacity, charging)
     }
 }
