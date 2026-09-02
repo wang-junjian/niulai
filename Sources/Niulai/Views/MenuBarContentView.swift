@@ -4,10 +4,10 @@ import SwiftUI
 struct MenuBarContentView: View {
     @ObservedObject var viewModel: PetViewModel
 
-    @AppStorage("roamingEnabled") private var roamingEnabled = true
-    @AppStorage("reminderMinutes") private var reminderMinutes = 45
-    @AppStorage("baolaAlways") private var baolaAlways = false
-    @AppStorage("soundEnabled") private var soundEnabled = true
+    @AppStorage(Settings.Key.roamingEnabled) private var roamingEnabled = true
+    @AppStorage(Settings.Key.reminderMinutes) private var reminderMinutes = 45
+    @AppStorage(Settings.Key.baolaAlways) private var baolaAlways = false
+    @AppStorage(Settings.Key.soundEnabled) private var soundEnabled = true
 
     var body: some View {
         Text("模式")

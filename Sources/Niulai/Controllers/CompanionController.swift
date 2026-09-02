@@ -36,7 +36,7 @@ final class CompanionController: ObservableObject {
     }
 
     private var alwaysOn: Bool {
-        UserDefaults.standard.bool(forKey: "baolaAlways")
+        Settings.baolaAlways
     }
 
     // MARK: - 登场/离场

@@ -39,11 +39,11 @@ final class PetViewModel: ObservableObject {
     /// 直接读写 UserDefaults 的计算属性，避免 @Published 在 nonisolated init 中的隔离问题
     var mode: PetMode {
         get {
-            PetMode(rawValue: UserDefaults.standard.string(forKey: "petMode") ?? "") ?? .leisure
+            Settings.petMode
         }
         set {
             objectWillChange.send()
-            UserDefaults.standard.set(newValue.rawValue, forKey: "petMode")
+            Settings.petMode = newValue
             reactToModeChange()
         }
     }
@@ -306,7 +306,7 @@ final class PetViewModel: ObservableObject {
             settleIntoCorner()
             return
         }
-        let roaming = UserDefaults.standard.object(forKey: "roamingEnabled") as? Bool ?? true
+        let roaming = Settings.roamingEnabled
         guard roaming else {
             setState(.sitting, duration: 60)
             return
@@ -459,7 +459,7 @@ final class PetViewModel: ObservableObject {
 
     /// “自由走动”开关变化后调用
     func applyRoaming() {
-        let roaming = UserDefaults.standard.object(forKey: "roamingEnabled") as? Bool ?? true
+        let roaming = Settings.roamingEnabled
         if roaming {
             stateUntil = Date()   // 立刻重新决策
         } else {
@@ -473,7 +473,7 @@ final class PetViewModel: ObservableObject {
     func configureReminder() {
         reminderTicker?.stop()
         reminderTicker = nil
-        let minutes = UserDefaults.standard.object(forKey: "reminderMinutes") as? Int ?? 45
+        let minutes = Settings.reminderMinutes
         guard minutes > 0 else { return }
         let ticker = FrameTicker(interval: TimeInterval(minutes * 60)) { [weak self] _ in
             self?.beginReminder()

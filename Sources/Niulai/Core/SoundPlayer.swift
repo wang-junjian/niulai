@@ -10,7 +10,7 @@ enum SoundPlayer {
     static let mama = "mama"
 
     private static var enabled: Bool {
-        UserDefaults.standard.object(forKey: "soundEnabled") as? Bool ?? true
+        Settings.soundEnabled
     }
 
     /// NSSound 播放期间自持有，播完自动释放，无需持有引用
