@@ -30,7 +30,7 @@ enum Settings {
     }
 
     static var baolaAlways: Bool {
-        UserDefaults.standard.bool(forKey: Key.baolaAlways)
+        UserDefaults.standard.object(forKey: Key.baolaAlways) as? Bool ?? true
     }
 
     static var soundEnabled: Bool {

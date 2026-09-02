@@ -6,7 +6,7 @@ struct MenuBarContentView: View {
 
     @AppStorage(Settings.Key.roamingEnabled) private var roamingEnabled = true
     @AppStorage(Settings.Key.reminderMinutes) private var reminderMinutes = 45
-    @AppStorage(Settings.Key.baolaAlways) private var baolaAlways = false
+    @AppStorage(Settings.Key.baolaAlways) private var baolaAlways = true
     @AppStorage(Settings.Key.soundEnabled) private var soundEnabled = true
 
     var body: some View {
