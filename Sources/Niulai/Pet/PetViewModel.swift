@@ -36,18 +36,6 @@ final class PetViewModel: ObservableObject {
         case rest    // 休息：牛来醒来陪你活动
     }
 
-    /// 直接读写 UserDefaults 的计算属性，避免 @Published 在 nonisolated init 中的隔离问题
-    var mode: PetMode {
-        get {
-            Settings.petMode
-        }
-        set {
-            objectWillChange.send()
-            Settings.petMode = newValue
-            reactToModeChange()
-        }
-    }
-
     @Published var state: State = .idle   // 仅 PetViewModel* 扩展内可写（注释约定）
     @Published var facingLeft = false
     @Published var bubbleText: String?
@@ -103,54 +91,12 @@ final class PetViewModel: ObservableObject {
     var nextWolfAt = Date.distantFuture
     var nextButterflyAt = Date.distantFuture
 
-    nonisolated init() {}
-
-    // MARK: - 模式切换
-
-    private func reactToModeChange() {
-        lastReactedMode = mode
-        objectWillChange.send()
-        switch mode {
-        case .working:
-            stopPomodoro()
-            companion?.onPetModeChanged(mode)
-            showBubble("我去做个勇敢的梦啦，你专心工作~", duration: 3)
-            settleIntoCorner()
-        case .pomodoro:
-            startPomodoro()
-        case .leisure:
-            stopPomodoro()
-            companion?.onPetModeChanged(mode)
-            showBubble("我醒啦！梦里的我可勇敢了！", duration: 3)
-            stateUntil = Date()   // 立刻恢复自由行为
-        }
-    }
-
-    /// 需要安静做梦的时期：工作模式，或番茄钟的专注阶段。
-    /// 云雀/蛇/狼彩蛋、戳一戳反应、漫游都以此为准。
-    var isPeaceful: Bool {
-        switch mode {
-        case .leisure: return false
-        case .working: return true
-        case .pomodoro: return pomodoroPhase == .focus
-        }
-    }
-
     /// 最近一次已响应的模式；tick 里轮询 UserDefaults，发现不一致就补响应，
     /// 保证无论改动来自菜单按钮还是外部（defaults 命令）都能生效
-    private var lastReactedMode: PetMode?
+    // internal: 核心 tick() 与 +Mode 读写（存储属性不能放扩展）
+    var lastReactedMode: PetMode?
 
-    /// 工作模式的归宿：走到屏幕右下角趴睡；已经在角落就直接睡
-    func settleIntoCorner() {   // internal: +Pomodoro/+Mode 用 {
-        let cornerX = visibleFrame.maxX - (window?.frame.width ?? 240) - 30
-        let currentX = window?.frame.minX ?? cornerX
-        if abs(currentX - cornerX) > 40 {
-            state = .walkingToSleep(cornerX)
-            stateUntil = Date().addingTimeInterval(30)
-        } else {
-            setState(.sleeping, duration: 3600)
-        }
-    }
+    nonisolated init() {}
 
     // MARK: - 生命周期
 
