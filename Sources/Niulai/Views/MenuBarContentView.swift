@@ -46,7 +46,7 @@ struct MenuBarContentView: View {
 
         Toggle("音效", isOn: $soundEnabled)
 
-        Picker("休息提醒", selection: $reminderMinutes) {
+        Picker("休息提醒（仅工作模式）", selection: $reminderMinutes) {
             Text("关闭").tag(0)
             Text("每 30 分钟").tag(30)
             Text("每 45 分钟").tag(45)

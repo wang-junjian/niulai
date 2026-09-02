@@ -7,11 +7,13 @@ extension PetViewModel {
     // MARK: - 休息提醒
 
     /// 读取设置并（重新）安排提醒定时器。reminderMinutes == 0 表示关闭。
+    /// 只伺候工作模式：番茄钟有自己的节奏，休闲本来就在休息。
+    /// 每次调用都从头计时（重建定时器）——改设置、切入工作模式都会重置。
     func configureReminder() {
         reminderTicker?.stop()
         reminderTicker = nil
         let minutes = Settings.reminderMinutes
-        guard minutes > 0 else { return }
+        guard minutes > 0, mode == .working else { return }
         let ticker = FrameTicker(interval: TimeInterval(minutes * 60)) { [weak self] _ in
             self?.beginReminder()
         }
@@ -20,7 +22,8 @@ extension PetViewModel {
     }
 
     private func beginReminder() {
-        guard isVisible, state != .dragged else { return }
+        // 双保险：定时器存续期间被切到别的模式（如直接改 defaults）也不打扰
+        guard mode == .working, isVisible, state != .dragged else { return }
         let target = visibleFrame.midX - (window?.frame.width ?? 240) / 2
         state = .walkingTo(target)
         stateUntil = Date().addingTimeInterval(20)   // 兜底：走太久就放弃

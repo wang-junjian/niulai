@@ -36,6 +36,8 @@ extension PetViewModel {
             showBubble("我醒啦！梦里的我可勇敢了！", duration: 3)
             stateUntil = Date()   // 立刻恢复自由行为
         }
+        // 休息提醒只伺候工作模式：切入工作从头计时，切走则停表
+        configureReminder()
     }
 
     /// 需要安静做梦的时期：工作模式，或番茄钟的专注阶段。
