@@ -34,10 +34,12 @@ final class LarkController: ObservableObject {
     }
 
     private func scheduleNext(after interval: TimeInterval) {
-        Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+        // .common 模式：菜单打开期间也照常吃时（默认 mode 的 scheduledTimer 会暂停）
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
             guard let self else { return }
             MainActor.assumeIsolated { self.beginFlight() }
         }
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     // MARK: - 飞行

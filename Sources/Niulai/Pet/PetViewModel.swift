@@ -66,19 +66,20 @@ final class PetViewModel: ObservableObject {
 
     private let walkSpeed: CGFloat = 55
     private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
-    private var reminderTimer: Timer?
+    /// 休息提醒：分钟级，间隔随设置变化，每次 configureReminder 重建
+    private var reminderTicker: FrameTicker?
     private var stateUntil = Date()
     private var bubbleGeneration = 0
 
     // 彩蛋事件调度
     private let demoMode = CommandLine.arguments.contains("--demo")
-    private var eventTimer: Timer?
+    private lazy var eventTicker = FrameTicker(interval: 5) { [weak self] _ in self?.checkEvents() }
     private var nextSnakeAt = Date.distantFuture
     private var nextWolfAt = Date.distantFuture
     private var nextButterflyAt = Date.distantFuture
 
     // 电量感知
-    private var batteryTimer: Timer?
+    private lazy var batteryTicker = FrameTicker(interval: 30) { [weak self] _ in self?.checkBattery() }
     private var wasCharging = false
     private var lowBatteryWarned = false
 
@@ -94,7 +95,7 @@ final class PetViewModel: ObservableObject {
     private var phaseEndsAt = Date()
     private var pausedRemaining: TimeInterval = 0
     private var completedFocusCount = 0
-    private var pomodoroTimer: Timer?
+    private lazy var pomodoroTicker = FrameTicker(interval: 1) { [weak self] _ in self?.pomodoroTick() }
 
     private var focusDuration: TimeInterval { demoMode ? 30 : 25 * 60 }
     private var restDuration: TimeInterval { demoMode ? 15 : 5 * 60 }
@@ -468,14 +469,15 @@ final class PetViewModel: ObservableObject {
 
     /// 读取设置并（重新）安排提醒定时器。reminderMinutes == 0 表示关闭。
     func configureReminder() {
-        reminderTimer?.invalidate()
-        reminderTimer = nil
+        reminderTicker?.stop()
+        reminderTicker = nil
         let minutes = UserDefaults.standard.object(forKey: "reminderMinutes") as? Int ?? 45
         guard minutes > 0 else { return }
-        reminderTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(minutes * 60), repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.beginReminder() }
+        let ticker = FrameTicker(interval: TimeInterval(minutes * 60)) { [weak self] _ in
+            self?.beginReminder()
         }
+        ticker.start()
+        reminderTicker = ticker
     }
 
     private func beginReminder() {
@@ -498,12 +500,7 @@ final class PetViewModel: ObservableObject {
         nextSnakeAt = now.addingTimeInterval(demoMode ? 8 : .random(in: 300...900))
         nextButterflyAt = now.addingTimeInterval(demoMode ? 15 : .random(in: 240...720))
         nextWolfAt = now.addingTimeInterval(demoMode ? 30 : .random(in: 600...1500))
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.checkEvents() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        eventTimer = timer
+        eventTicker.start()
     }
 
     private func checkEvents() {
@@ -622,12 +619,7 @@ final class PetViewModel: ObservableObject {
 
     private func startBatteryMonitor() {
         checkBattery()
-        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.checkBattery() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        batteryTimer = timer
+        batteryTicker.start()
     }
 
     private func checkBattery() {
@@ -659,19 +651,12 @@ final class PetViewModel: ObservableObject {
         companion?.onPetModeChanged(.working)   // 专注时豹拉不打扰
         showBubble("番茄钟开始！专注 25 分钟，我去梦里陪你~", duration: 4)
         settleIntoCorner()
-        pomodoroTimer?.invalidate()
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.pomodoroTick() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        pomodoroTimer = timer
+        pomodoroTicker.start()
         pomodoroTick()
     }
 
     private func stopPomodoro() {
-        pomodoroTimer?.invalidate()
-        pomodoroTimer = nil
+        pomodoroTicker.stop()
         pomodoroPaused = false
         pomodoroCountdown = ""
         menuBarLabel = "🐮"
