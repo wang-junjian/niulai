@@ -82,7 +82,7 @@ extension PetViewModel {
     func startChasingButterfly() {
         guard !isPeaceful, isVisible, !isBusyForEvent, butterfly != nil else { return }
         showBubble("蝴蝶！等等我！", duration: 2)
-        setState(.chasing, duration: 8)   // 兜底：追不上自己停下
+        setState(.chasing, duration: 16)   // 兜底：追不上自己停下（正常由甩开距离 420px 结束）
     }
 
     /// 蝴蝶快到屏幕边了：跳起来扑

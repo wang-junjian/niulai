@@ -150,8 +150,14 @@ final class PetViewModel: ObservableObject {
                 butterflyGone()
                 break
             }
-            // 死区：追到蝴蝶正下方附近就稳住朝向不再横跳（否则每帧翻转闪烁）
             let dx = butterfly.currentX - window.frame.midX
+            // 蝴蝶被追会加速，距离拉大到触发半径（340）之外就放弃——不会立刻重新触发
+            if abs(dx) > 420 {
+                showBubble("飞得好快……不追了不追了", duration: 2)
+                setState(.idle, duration: 2)
+                break
+            }
+            // 死区：追到蝴蝶正下方附近就稳住朝向不再横跳（否则每帧翻转闪烁）
             if abs(dx) > 24 {
                 facingLeft = dx < 0
                 let step = min(walkSpeed * 2.2 * dt, abs(dx))

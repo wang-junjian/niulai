@@ -50,7 +50,8 @@ final class ButterflyController: ScreenCrosser {
 
     override class var size: NSSize { NSSize(width: 110, height: 95) }
     private let cruiseSpeed: CGFloat = 65
-    private let escapeSpeed: CGFloat = 190
+    private let chasedSpeed: CGFloat = 180   // 被追时明显加速：相对牛来（121）每秒拉开约 60px，几秒内甩掉
+    private let escapeSpeed: CGFloat = 260   // 被扑中后的全力逃走，全场最快
 
     func flyAcross(fromLeft: Bool, groundY: CGFloat) {
         startCrossing(fromLeft: fromLeft, groundY: groundY, referenceWindow: pet?.window)
@@ -77,7 +78,9 @@ final class ButterflyController: ScreenCrosser {
 
     override func updatePosition(dt: CGFloat, origin: inout CGPoint, vf: NSRect) {
         flyTime += dt
-        origin.x += direction * (escaping ? escapeSpeed : cruiseSpeed) * dt
+        // 被牛来盯上就加速甩开；被扑中则全力逃走
+        let speed = escaping ? escapeSpeed : (pet?.state == .chasing ? chasedSpeed : cruiseSpeed)
+        origin.x += direction * speed * dt
         origin.y = baseY + sin(flyTime * 3) * 16   // 蝴蝶式上下翻飞
         if escaping { baseY += 50 * dt }           // 逃走时往上爬升
     }
