@@ -46,21 +46,39 @@ swift run Niulai
 
 ```
 Sources/Niulai/
-├── NiulaiApp.swift            # 入口 + 菜单栏（MenuBarExtra）
-├── PetWindowController.swift  # 牛来的无边框透明置顶窗口
-├── PetViewModel.swift         # 牛来行为状态机 + 工作/休闲模式 + 台词库
-├── PetContainerView.swift     # 牛来的拖拽/点击手势装配
-├── NiulaiView.swift           # Canvas 绘制牛来（电影直立版）+ 动画参数
-├── BaolaView.swift            # Canvas 绘制豹拉
-├── CompanionController.swift  # 豹拉的跟随走位/登场离场
-├── LarkView.swift             # Canvas 绘制云雀
-├── LarkController.swift       # 云雀的飞行调度（--demo 参数可立即触发）
-├── SnakeController.swift      # 青蛇蜿蜒爬过（脊线波浪动画 + 吐信子）
-├── WolfController.swift       # 狼飞奔横穿（两节腿奔驰步态）+ 豹拉护卫联动
-├── ButterflyController.swift  # 蝴蝶掠过 + 牛来追逐/扑空编排
-├── SoundPlayer.swift          # 音效播放（电影原声 mp3，存于 Sources/Niulai/Resources）
-├── SpeechBubbleView.swift     # 对话气泡（牛来/豹拉共用）
-└── MenuBarContentView.swift   # 菜单栏控制项
+├── NiulaiApp.swift               # 入口 + 菜单栏（MenuBarExtra）
+├── Settings.swift                # UserDefaults key/默认值集中 + 类型化访问
+├── Core/
+│   ├── FrameTicker.swift         # 间隔参数化定时器（dt 封顶 + .common runloop）
+│   ├── WindowFactory.swift       # 无边框透明悬浮窗工厂
+│   ├── ScreenGeometry.swift      # visibleFrame 回退链
+│   └── SoundPlayer.swift         # 音效播放（电影原声 mp3，存于 Resources/）
+├── Pet/
+│   ├── PetViewModel.swift        # 核心状态机：tick/移动/撞边/互动/气泡/显隐
+│   ├── PetViewModel+Mode.swift   # 三种模式切换与安静期判定
+│   ├── PetViewModel+Pomodoro.swift   # 番茄钟（专注做梦 + 休息陪伴）
+│   ├── PetViewModel+Events.swift     # 蛇/狼影/蝴蝶彩蛋调度 + 追蝴蝶回调
+│   ├── PetViewModel+Reminder.swift   # 休息提醒 + 电量感知
+│   ├── PetPhrases.swift          # 台词库（戳/梦话/工作戳/提醒）
+│   └── PetWindowController.swift # 牛来窗口：鼠标所在屏出生
+├── Controllers/
+│   ├── ScreenCrosser.swift       # 横穿屏幕基类（入场→移动→出屏回调 + hook）
+│   ├── SnakeController.swift     # 青蛇：速度/外壳，蜿蜒动画在 Views
+│   ├── WolfController.swift      # 狼影：飞奔横穿 + 豹拉护卫联动
+│   ├── ButterflyController.swift # 蝴蝶：翻飞/逃逸/追扑触发 hook
+│   ├── LarkController.swift      # 云雀：飞行调度 + 歇脚子状态机
+│   └── CompanionController.swift # 豹拉：跟随走位/登场离场
+├── Views/
+│   ├── NiulaiView.swift          # Canvas 绘制牛来（电影直立版）+ 动画参数
+│   ├── PetContainerView.swift    # 牛来的拖拽/点击手势装配
+│   ├── BaolaView.swift           # Canvas 绘制豹拉
+│   ├── LarkView.swift            # Canvas 绘制云雀
+│   ├── SnakeView.swift           # Canvas 绘制青蛇（脊线波浪 + 吐信子）
+│   ├── WolfView.swift            # Canvas 绘制狼（两节腿奔驰步态）
+│   ├── ButterflyView.swift       # Canvas 绘制蝴蝶（分层翅膀 + 随机配色）
+│   ├── SpeechBubbleView.swift    # 对话气泡（牛来/豹拉共用）
+│   └── MenuBarContentView.swift  # 菜单栏控制项
+└── Resources/                    # 电影原声 mp3（妈妈/牛来）
 ```
 
 ## 设计说明
