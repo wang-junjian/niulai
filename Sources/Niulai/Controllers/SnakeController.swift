@@ -9,8 +9,7 @@ final class SnakeController: ObservableObject {
     @Published var facingLeft = false
 
     private var window: NSWindow?
-    private var timer: Timer?
-    private var lastTick = Date()
+    private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
     private var direction: CGFloat = 1
 
     /// 蛇爬出屏幕后回调（牛来用于说感想）
@@ -34,21 +33,10 @@ final class SnakeController: ObservableObject {
         ))
         running = true
         window.orderFrontRegardless()
-
-        lastTick = Date()
-        timer?.invalidate()
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.tick() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        ticker.start()
     }
 
-    private func tick() {
-        let now = Date()
-        let dt = min(CGFloat(now.timeIntervalSince(lastTick)), 0.1)
-        lastTick = now
+    private func tick(dt: CGFloat) {
         guard running, let window else { return }
         let vf = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
 
@@ -59,8 +47,7 @@ final class SnakeController: ObservableObject {
         if origin.x > vf.maxX + 10 || origin.x + Self.size.width < vf.minX - 10 {
             running = false
             window.orderOut(nil)
-            timer?.invalidate()
-            timer = nil
+            ticker.stop()
             let callback = onExit
             onExit = nil
             callback?()

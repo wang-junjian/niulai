@@ -45,8 +45,7 @@ final class ButterflyController: ObservableObject {
     weak var pet: PetViewModel?
 
     private var window: NSWindow?
-    private var timer: Timer?
-    private var lastTick = Date()
+    private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
     private var direction: CGFloat = 1
     private var baseY: CGFloat = 0
     private var flyTime: TimeInterval = 0
@@ -81,21 +80,10 @@ final class ButterflyController: ObservableObject {
         ))
         flying = true
         window.orderFrontRegardless()
-
-        lastTick = Date()
-        timer?.invalidate()
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.tick() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        ticker.start()
     }
 
-    private func tick() {
-        let now = Date()
-        let dt = min(CGFloat(now.timeIntervalSince(lastTick)), 0.1)
-        lastTick = now
+    private func tick(dt: CGFloat) {
         guard flying, let window, let pet, let petWindow = pet.window else { return }
         let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
 
@@ -127,8 +115,7 @@ final class ButterflyController: ObservableObject {
         if origin.x > vf.maxX + 10 || origin.x + Self.size.width < vf.minX - 10 {
             flying = false
             window.orderOut(nil)
-            timer?.invalidate()
-            timer = nil
+            ticker.stop()
             pet.butterflyGone()
         }
     }

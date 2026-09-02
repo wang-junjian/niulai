@@ -17,8 +17,7 @@ final class LarkController: ObservableObject {
     private let demoMode = CommandLine.arguments.contains("--demo")
 
     private var window: NSWindow?
-    private var moveTimer: Timer?
-    private var lastTick = Date()
+    private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
     private var direction: CGFloat = -1
     private var willPerch = false
     private var perchUntil = Date.distantPast
@@ -68,13 +67,11 @@ final class LarkController: ObservableObject {
         flying = true
         perched = false
         window.orderFrontRegardless()
-        startMoveTimer()
+        ticker.start()
     }
 
-    private func tick() {
+    private func tick(dt: CGFloat) {
         let now = Date()
-        let dt = min(CGFloat(now.timeIntervalSince(lastTick)), 0.1)
-        lastTick = now
         guard flying, let window, let petWindow = pet.window else { return }
         let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
 
@@ -108,8 +105,7 @@ final class LarkController: ObservableObject {
             flying = false
             perched = false
             window.orderOut(nil)
-            moveTimer?.invalidate()
-            moveTimer = nil
+            ticker.stop()
             scheduleNext(after: demoMode ? 30 : .random(in: 180...480))
         }
     }
@@ -150,16 +146,5 @@ final class LarkController: ObservableObject {
         w.contentView = NSHostingView(rootView: LarkView(controller: self))
         w.setContentSize(Self.size)
         window = w
-    }
-
-    private func startMoveTimer() {
-        lastTick = Date()
-        moveTimer?.invalidate()
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.tick() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        moveTimer = timer
     }
 }

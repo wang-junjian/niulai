@@ -65,9 +65,8 @@ final class PetViewModel: ObservableObject {
     weak var butterfly: ButterflyController?
 
     private let walkSpeed: CGFloat = 55
-    private var ticker: Timer?
+    private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
     private var reminderTimer: Timer?
-    private var lastTick = Date()
     private var stateUntil = Date()
     private var bubbleGeneration = 0
 
@@ -191,13 +190,7 @@ final class PetViewModel: ObservableObject {
     // MARK: - 生命周期
 
     func start() {
-        lastTick = Date()
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated { self.tick() }
-        }
-        RunLoop.main.add(timer, forMode: .common)   // 菜单打开时也保持运行
-        ticker = timer
+        ticker.start()
         configureReminder()
         scheduleEvents()
         startBatteryMonitor()
@@ -214,10 +207,8 @@ final class PetViewModel: ObservableObject {
 
     // MARK: - 主循环
 
-    private func tick() {
+    private func tick(dt: CGFloat) {
         let now = Date()
-        let dt = min(CGFloat(now.timeIntervalSince(lastTick)), 0.1)   // 封顶，防补帧瞬移
-        lastTick = now
 
         // 模式是 UserDefaults 背书的：发现变化（菜单按钮或外部改动）立刻响应
         if mode != lastReactedMode { reactToModeChange() }
