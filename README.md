@@ -26,6 +26,15 @@
 - **菜单栏控制**：🐮 图标 → 模式切换、显示/隐藏、自由走动、豹拉常伴、休息提醒间隔、退出
 - **休息提醒**：定时走到屏幕中间提醒你起来活动（默认 45 分钟，可关）
 
+## 下载安装（Release）
+
+从 [Releases](../../releases) 页面下载 `Niulai-vX.Y-macOS.zip`，解压得到 `Niulai.app`（Apple Silicon + Intel 通用）。
+
+因为应用使用 ad-hoc 签名（没有付费开发者证书），首次打开会被 Gatekeeper 拦截，任选一种方式放行：
+
+- 右键 `Niulai.app` → **打开** → 在弹窗中再点 **打开**；或
+- 终端执行：`xattr -cr Niulai.app`
+
 ## 运行
 
 ```bash
@@ -37,10 +46,21 @@ swift run Niulai
 ## 打包成 App
 
 ```bash
-./bundle.sh        # 生成 Niulai.app（ad-hoc 签名，本机可运行）
+./bundle.sh [版本号]   # 生成 Niulai.app（通用二进制，ad-hoc 签名）
 ```
 
 打包后无 Dock 图标（LSUIElement）。开机自启：系统设置 → 通用 → 登录项 → 添加 Niulai.app。
+
+## 发布新版本
+
+打了 `v*` 标签就会触发 GitHub Actions 自动打包并发布到 Releases 页面：
+
+```bash
+git tag v0.2
+git push origin v0.2
+```
+
+流水线见 [.github/workflows/release.yml](.github/workflows/release.yml)：macOS 运行器上编译通用二进制 → 打包压缩 → 创建 Release 并自动生成更新说明。
 
 ## 代码结构
 

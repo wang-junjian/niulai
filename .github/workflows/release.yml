@@ -1,0 +1,32 @@
+name: Release
+
+# 打 tag 即发布：git tag v0.2 && git push origin v0.2
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # 允许 GITHUB_TOKEN 创建 Release
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 打包 Niulai.app 并压缩
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          ./bundle.sh "$VERSION"
+          ditto -c -k --keepParent Niulai.app "Niulai-${GITHUB_REF_NAME}-macOS.zip"
+          shasum -a 256 "Niulai-${GITHUB_REF_NAME}-macOS.zip"
+
+      - name: 发布到 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "Niulai-${GITHUB_REF_NAME}-macOS.zip" \
+            --title "牛来 $GITHUB_REF_NAME" \
+            --generate-notes
