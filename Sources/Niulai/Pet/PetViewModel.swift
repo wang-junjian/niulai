@@ -116,6 +116,7 @@ final class PetViewModel: ObservableObject {
             setState(.idle, duration: 3)
         }
         lastReactedMode = mode   // 启动分支已处理，避免 tick 第一帧重复响应
+        openingCall()   // 开场呼唤：妈妈——！/ 牛来——！
     }
 
     // MARK: - 主循环

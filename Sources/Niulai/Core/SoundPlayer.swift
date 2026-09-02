@@ -4,9 +4,9 @@ import AppKit
 /// 菜单里的「音效」开关（soundEnabled，默认开）控制是否出声。
 enum SoundPlayer {
 
-    /// 牛来的名字呼唤——番茄钟阶段切换的提示音
+    /// 牛来的名字呼唤——番茄钟阶段切换的提示音；也是开场时远处妈妈的回应
     static let niulai = "niulai"
-    /// 睡梦中呢喃的「妈妈」——那句梦话出现时低音量同步播放
+    /// 委屈的「妈妈——！」——开场呼唤；休闲打盹梦话时也会低音量呢喃
     static let mama = "mama"
 
     private static var enabled: Bool {
