@@ -72,7 +72,7 @@ final class PetViewModel: ObservableObject {
     private var bubbleGeneration = 0
 
     // 彩蛋事件调度
-    private let demoMode = CommandLine.arguments.contains("--demo")
+    let demoMode = CommandLine.arguments.contains("--demo")   // internal: +Pomodoro/+Events 用
     private lazy var eventTicker = FrameTicker(interval: 5) { [weak self] _ in self?.checkEvents() }
     private var nextSnakeAt = Date.distantFuture
     private var nextWolfAt = Date.distantFuture
@@ -87,19 +87,17 @@ final class PetViewModel: ObservableObject {
     private var mamaDreamArmed = false
     private var mamaDreamPlayed = false
 
+    // MARK: - 番茄钟存储属性
+    // （Swift 扩展不能持有存储属性，番茄钟的状态集中放这里；方法见 PetViewModel+Pomodoro.swift）
     // 番茄钟
-    @Published private(set) var pomodoroPhase: PomodoroPhase = .focus
-    @Published private(set) var pomodoroCountdown = ""
-    @Published private(set) var pomodoroPaused = false
-    @Published private(set) var menuBarLabel = "🐮"
-    private var phaseEndsAt = Date()
-    private var pausedRemaining: TimeInterval = 0
-    private var completedFocusCount = 0
-    private lazy var pomodoroTicker = FrameTicker(interval: 1) { [weak self] _ in self?.pomodoroTick() }
-
-    private var focusDuration: TimeInterval { demoMode ? 30 : 25 * 60 }
-    private var restDuration: TimeInterval { demoMode ? 15 : 5 * 60 }
-    private var longRestDuration: TimeInterval { demoMode ? 45 : 15 * 60 }
+    @Published var pomodoroPhase: PomodoroPhase = .focus
+    @Published var pomodoroCountdown = ""
+    @Published var pomodoroPaused = false
+    @Published var menuBarLabel = "🐮"
+    var phaseEndsAt = Date()   // internal: 核心 poke() 读
+    var pausedRemaining: TimeInterval = 0   // internal: 仅 +Pomodoro 写
+    var completedFocusCount = 0   // internal: 仅 +Pomodoro 写
+    lazy var pomodoroTicker = FrameTicker(interval: 1) { [weak self] _ in self?.pomodoroTick() }
 
     nonisolated init() {}
 
@@ -139,7 +137,7 @@ final class PetViewModel: ObservableObject {
     private var lastReactedMode: PetMode?
 
     /// 工作模式的归宿：走到屏幕右下角趴睡；已经在角落就直接睡
-    private func settleIntoCorner() {
+    func settleIntoCorner() {   // internal: +Pomodoro/+Mode 用 {
         let cornerX = visibleFrame.maxX - (window?.frame.width ?? 240) - 30
         let currentX = window?.frame.minX ?? cornerX
         if abs(currentX - cornerX) > 40 {
@@ -298,7 +296,7 @@ final class PetViewModel: ObservableObject {
         }
     }
 
-    private func setState(_ s: State, duration: TimeInterval) {
+    func setState(_ s: State, duration: TimeInterval) {   // internal: +Pomodoro/+Events/+Reminder/+Mode 用 {
         state = s
         stateStartedAt = Date()
         stateUntil = Date().addingTimeInterval(duration)
@@ -602,91 +600,6 @@ final class PetViewModel: ObservableObject {
         }
         if percent > 30 { lowBatteryWarned = false }
         wasCharging = charging
-    }
-
-    // MARK: - 番茄钟
-
-    /// 进入番茄钟：立刻开始第一个专注阶段
-    private func startPomodoro() {
-        pomodoroPhase = .focus
-        completedFocusCount = 0
-        pomodoroPaused = false
-        phaseEndsAt = Date().addingTimeInterval(focusDuration)
-        companion?.onPetModeChanged(.working)   // 专注时豹拉不打扰
-        showBubble("番茄钟开始！专注 25 分钟，我去梦里陪你~", duration: 4)
-        settleIntoCorner()
-        pomodoroTicker.start()
-        pomodoroTick()
-    }
-
-    private func stopPomodoro() {
-        pomodoroTicker.stop()
-        pomodoroPaused = false
-        pomodoroCountdown = ""
-        menuBarLabel = "🐮"
-    }
-
-    private func pomodoroTick() {
-        guard mode == .pomodoro else { return }
-        if pomodoroPaused {
-            if pomodoroCountdown != "已暂停" { pomodoroCountdown = "已暂停" }
-            return
-        }
-        let remain = max(0, phaseEndsAt.timeIntervalSinceNow)
-        // 菜单栏图标静态化、菜单内倒计时分钟级：都不每秒变，避免打开的菜单被反复重渲染闪白。
-        // 相同字符串不重复赋值（@Published 每次赋值都触发 objectWillChange）。
-        let label = pomodoroPhase == .focus ? "🐮🍅" : "🐮☕️"
-        if menuBarLabel != label { menuBarLabel = label }
-        let minutes = Int(remain) / 60
-        let text = minutes >= 1 ? "还剩 \(minutes) 分钟" : "不到 1 分钟"
-        if pomodoroCountdown != text { pomodoroCountdown = text }
-        if remain <= 0 { advancePomodoroPhase() }
-    }
-
-    /// 阶段切换：专注→休息（每 4 轮一次 15 分钟长休息），休息→专注
-    private func advancePomodoroPhase() {
-        SoundPlayer.play(SoundPlayer.niulai, volume: 0.8)   // 一声「牛来！」叫你换阶段
-        switch pomodoroPhase {
-        case .focus:
-            completedFocusCount += 1
-            pomodoroPhase = .rest
-            let longRest = completedFocusCount % 4 == 0
-            phaseEndsAt = Date().addingTimeInterval(longRest ? longRestDuration : restDuration)
-            companion?.onPetModeChanged(.leisure)   // 休息时豹拉可以来玩
-            setState(.stretching, duration: 3)   // 睡醒伸个大懒腰
-            showBubble(
-                longRest
-                    ? "哞！四轮专注完成！好好休息 15 分钟，你太棒了！"
-                    : "哞！休息 5 分钟！站起来活动活动，喝口水~",
-                duration: 5
-            )
-        case .rest:
-            pomodoroPhase = .focus
-            phaseEndsAt = Date().addingTimeInterval(focusDuration)
-            companion?.onPetModeChanged(.working)
-            showBubble("继续专注！我去梦里给你加油，待会儿见~", duration: 4)
-            settleIntoCorner()
-        }
-    }
-
-    func togglePomodoroPause() {
-        guard mode == .pomodoro else { return }
-        if pomodoroPaused {
-            pomodoroPaused = false
-            phaseEndsAt = Date().addingTimeInterval(pausedRemaining)
-        } else {
-            pomodoroPaused = true
-            pausedRemaining = max(0, phaseEndsAt.timeIntervalSinceNow)
-            menuBarLabel = "🐮 ⏸"
-        }
-        pomodoroTick()
-    }
-
-    func skipPomodoroPhase() {
-        guard mode == .pomodoro else { return }
-        pomodoroPaused = false
-        advancePomodoroPhase()
-        pomodoroTick()
     }
 
     /// 通过 IOKit 读取内置电池（台式机无电池时返回 nil）
