@@ -66,6 +66,8 @@ final class PetViewModel: ObservableObject {
     lazy var batteryTicker = FrameTicker(interval: 30) { [weak self] _ in self?.checkBattery() }
     var wasCharging = false   // internal: +Reminder 写
     var lowBatteryWarned = false   // internal: +Reminder 写
+    var reminderInterval: TimeInterval = 0   // internal: +Reminder 写
+    var nextReminderAt: Date?   // internal: +Reminder 写，核心 poke() 读
 
     // 梦到妈妈彩蛋：休闲模式每次入睡掷签，抽中的觉睡到中途必然触发（一觉最多一次）
     private var mamaDreamArmed = false
@@ -209,8 +211,9 @@ final class PetViewModel: ObservableObject {
             SoundPlayer.play(SoundPlayer.mama, volume: 0.3)
         }
 
-        // 打盹时偶尔说梦话（平均约 20 秒一句）
-        if state == .sleeping, bubbleText == nil, Int.random(in: 0..<1200) == 0 {
+        // 打盹时偶尔说梦话（平均约 20 秒一句）。番茄钟模式下不说——专注期怕吵，
+        // 休息时想看时间戳一下就好，气泡只留给用户主动戳
+        if state == .sleeping, mode != .pomodoro, bubbleText == nil, Int.random(in: 0..<1200) == 0 {
             let phrase = Self.dreamPhrases.randomElement() ?? "（梦话）哞……"
             showBubble(phrase, duration: 3.5)
         }
@@ -322,6 +325,19 @@ final class PetViewModel: ObservableObject {
             } else {
                 let remain = max(0, phaseEndsAt.timeIntervalSinceNow)
                 showBubble(String(format: "哞……还剩 %d:%02d", Int(remain) / 60, Int(remain) % 60), duration: 3)
+            }
+            return
+        }
+        // 工作模式睡觉时被戳：同样不吵醒，报休息提醒的倒计时；提醒关了就如实说
+        if mode == .working, state == .sleeping {
+            if let nextReminderAt {
+                let remain = max(0, nextReminderAt.timeIntervalSinceNow)
+                let minutes = Int(remain / 60)
+                showBubble(minutes >= 1
+                    ? "哞……再过 \(minutes) 分钟就叫你休息"
+                    : "哞……马上就提醒你休息了", duration: 3)
+            } else {
+                showBubble("哞……休息提醒关着呢，你可别忘了自己歇口气", duration: 3)
             }
             return
         }

@@ -12,9 +12,12 @@ extension PetViewModel {
     func configureReminder() {
         reminderTicker?.stop()
         reminderTicker = nil
+        nextReminderAt = nil
         let minutes = Settings.reminderMinutes
         guard minutes > 0, mode == .working else { return }
-        let ticker = FrameTicker(interval: TimeInterval(minutes * 60)) { [weak self] _ in
+        reminderInterval = TimeInterval(minutes * 60)
+        nextReminderAt = Date().addingTimeInterval(reminderInterval)
+        let ticker = FrameTicker(interval: reminderInterval) { [weak self] _ in
             self?.beginReminder()
         }
         ticker.start()
@@ -22,6 +25,7 @@ extension PetViewModel {
     }
 
     private func beginReminder() {
+        nextReminderAt = Date().addingTimeInterval(reminderInterval)   // 提醒完，重新计下一轮
         // 双保险：定时器存续期间被切到别的模式（如直接改 defaults）也不打扰
         guard mode == .working, isVisible, state != .dragged else { return }
         let target = visibleFrame.midX - (window?.frame.width ?? 240) / 2
