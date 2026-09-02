@@ -118,9 +118,10 @@ final class CompanionController: ObservableObject {
         }
 
         // 目标位：护卫位优先（狼影事件），否则牛来身后一个身位
+        // 窗口重叠 110pt：两边画布边缘都是透明留白，视觉上刚好贴身跟随（朋友就该挨着走）
         let targetX = guardTargetX ?? (pet.facingLeft
-            ? petWindow.frame.maxX + 6
-            : petWindow.frame.minX - Self.size.width - 6)
+            ? petWindow.frame.maxX - 110
+            : petWindow.frame.minX - Self.size.width + 110)
         var origin = window.frame.origin
         let dx = targetX - origin.x
 
