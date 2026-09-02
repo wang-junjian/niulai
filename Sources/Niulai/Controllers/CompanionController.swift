@@ -75,7 +75,7 @@ final class CompanionController: ObservableObject {
         guard !present, pet.isVisible else { return }   // 牛来被隐藏时不单独冒出来
         ensureWindow()
         guard let window, let petWindow = pet.window else { return }
-        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: petWindow)
 
         // 从牛来前进方向的反侧屏幕边缘跑进来
         let fromLeft = !pet.facingLeft
@@ -98,7 +98,7 @@ final class CompanionController: ObservableObject {
     private func tick(dt: CGFloat) {
         let now = Date()
         guard present, let window, let petWindow = pet.window else { return }
-        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: petWindow)
 
         if leaving {
             // 走向最近的屏幕边缘，走出去就消失
@@ -216,20 +216,10 @@ final class CompanionController: ObservableObject {
 
     private func ensureWindow() {
         guard window == nil else { return }
-        let w = NSWindow(
-            contentRect: NSRect(origin: .zero, size: Self.size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
+        // 豹拉要响应点击（poke），不忽略鼠标事件
+        window = WindowFactory.makeFloatingWindow(
+            size: Self.size,
+            rootView: BaolaContainerView(controller: self)
         )
-        w.isOpaque = false
-        w.backgroundColor = .clear
-        w.hasShadow = false
-        w.level = .floating
-        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        w.isReleasedWhenClosed = false
-        w.contentView = NSHostingView(rootView: BaolaContainerView(controller: self))
-        w.setContentSize(Self.size)
-        window = w
     }
 }

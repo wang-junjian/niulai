@@ -65,7 +65,7 @@ final class ButterflyController: ObservableObject {
         guard let pet, pet.isVisible, !pet.isPeaceful, let petWindow = pet.window else { return }
         ensureWindow()
         guard let window else { return }
-        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: petWindow)
 
         direction = fromLeft ? 1 : -1
         facingLeft = !fromLeft
@@ -85,7 +85,7 @@ final class ButterflyController: ObservableObject {
 
     private func tick(dt: CGFloat) {
         guard flying, let window, let pet, let petWindow = pet.window else { return }
-        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: petWindow)
 
         flyTime += dt
         var origin = window.frame.origin
@@ -131,22 +131,11 @@ final class ButterflyController: ObservableObject {
 
     private func ensureWindow() {
         guard window == nil else { return }
-        let w = NSWindow(
-            contentRect: NSRect(origin: .zero, size: Self.size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
+        window = WindowFactory.makeFloatingWindow(
+            size: Self.size,
+            ignoresMouseEvents: true,   // 纯视觉，不挡点击
+            rootView: ButterflyView(controller: self)
         )
-        w.isOpaque = false
-        w.backgroundColor = .clear
-        w.hasShadow = false
-        w.level = .floating
-        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        w.isReleasedWhenClosed = false
-        w.ignoresMouseEvents = true
-        w.contentView = NSHostingView(rootView: ButterflyView(controller: self))
-        w.setContentSize(Self.size)
-        window = w
     }
 }
 

@@ -353,8 +353,10 @@ final class PetViewModel: ObservableObject {
     // MARK: - 窗口移动
 
     private var visibleFrame: NSRect {
-        window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
-            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        ScreenGeometry.visibleFrame(
+            of: window,
+            fallback: NSRect(x: 0, y: 0, width: 1440, height: 900)   // 锁屏时坐标可能是垃圾值，兜底
+        )
     }
 
     private func move(dx: CGFloat) {

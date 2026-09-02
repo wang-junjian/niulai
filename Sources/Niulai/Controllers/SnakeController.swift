@@ -23,7 +23,7 @@ final class SnakeController: ObservableObject {
     func slitherAcross(fromLeft: Bool, groundY: CGFloat) {
         ensureWindow()
         guard let window else { return }
-        let vf = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: window)
 
         direction = fromLeft ? 1 : -1
         facingLeft = !fromLeft
@@ -38,7 +38,7 @@ final class SnakeController: ObservableObject {
 
     private func tick(dt: CGFloat) {
         guard running, let window else { return }
-        let vf = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: window)
 
         var origin = window.frame.origin
         origin.x += direction * crawlSpeed * dt
@@ -60,22 +60,11 @@ final class SnakeController: ObservableObject {
 
     private func ensureWindow() {
         guard window == nil else { return }
-        let w = NSWindow(
-            contentRect: NSRect(origin: .zero, size: Self.size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
+        window = WindowFactory.makeFloatingWindow(
+            size: Self.size,
+            ignoresMouseEvents: true,   // 纯视觉威胁，不挡点击
+            rootView: SnakeView(controller: self)
         )
-        w.isOpaque = false
-        w.backgroundColor = .clear
-        w.hasShadow = false
-        w.level = .floating
-        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        w.isReleasedWhenClosed = false
-        w.ignoresMouseEvents = true
-        w.contentView = NSHostingView(rootView: SnakeView(controller: self))
-        w.setContentSize(Self.size)
-        window = w
     }
 }
 

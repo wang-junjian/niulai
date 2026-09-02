@@ -21,20 +21,11 @@ final class PetWindowController {
             y: screenFrame.minY + 24
         )
 
-        window = NSWindow(
-            contentRect: NSRect(origin: origin, size: Self.windowSize),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
+        window = WindowFactory.makeFloatingWindow(
+            size: Self.windowSize,
+            origin: origin,
+            rootView: PetContainerView(viewModel: viewModel)
         )
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.hasShadow = false
-        window.level = .floating
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: PetContainerView(viewModel: viewModel))
-        window.setContentSize(Self.windowSize)   // 固定尺寸，防止 SwiftUI 自适应改窗
 
         viewModel.window = window
     }

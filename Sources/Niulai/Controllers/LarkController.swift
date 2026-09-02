@@ -57,7 +57,7 @@ final class LarkController: ObservableObject {
         ensureWindow()
         guard let window else { return }
 
-        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: petWindow)
         let fromLeft = Bool.random()
         direction = fromLeft ? 1 : -1
         facingLeft = !fromLeft
@@ -75,7 +75,7 @@ final class LarkController: ObservableObject {
     private func tick(dt: CGFloat) {
         let now = Date()
         guard flying, let window, let petWindow = pet.window else { return }
-        let vf = petWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let vf = ScreenGeometry.visibleFrame(of: petWindow)
 
         if perched {
             // 歇在牛来头顶，跟着它走
@@ -132,21 +132,10 @@ final class LarkController: ObservableObject {
 
     private func ensureWindow() {
         guard window == nil else { return }
-        let w = NSWindow(
-            contentRect: NSRect(origin: .zero, size: Self.size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
+        window = WindowFactory.makeFloatingWindow(
+            size: Self.size,
+            ignoresMouseEvents: true,   // 纯路过，不挡点击
+            rootView: LarkView(controller: self)
         )
-        w.isOpaque = false
-        w.backgroundColor = .clear
-        w.hasShadow = false
-        w.level = .floating
-        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        w.isReleasedWhenClosed = false
-        w.ignoresMouseEvents = true   // 纯路过，不挡点击
-        w.contentView = NSHostingView(rootView: LarkView(controller: self))
-        w.setContentSize(Self.size)
-        window = w
     }
 }
