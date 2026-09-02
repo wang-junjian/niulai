@@ -3,11 +3,10 @@ import SwiftUI
 
 /// 小蝴蝶：慢悠悠掠过屏幕。牛来注意到会小跑着追，快飞出屏幕时
 /// 跳起来扑——多半扑空，蝴蝶加速往上逃走。纯视觉，不响应鼠标。
+/// 移动骨架在 ScreenCrosser 基类；这里实现翻飞/逃逸/追扑触发的 hook。
 @MainActor
-final class ButterflyController: ObservableObject {
+final class ButterflyController: ScreenCrosser {
 
-    @Published var flying = false
-    @Published var facingLeft = false
     @Published private(set) var scheme = ButterflyController.schemes[0]
 
     /// 翅膀配色方案：主色 / 中间色带 / 眼斑芯 / 远翅深色
@@ -44,55 +43,47 @@ final class ButterflyController: ObservableObject {
 
     weak var pet: PetViewModel?
 
-    private var window: NSWindow?
-    private lazy var ticker = FrameTicker { [weak self] dt in self?.tick(dt: dt) }
-    private var direction: CGFloat = 1
     private var baseY: CGFloat = 0
     private var flyTime: TimeInterval = 0
     private var escaping = false      // 被扑之后加速逃走
     private var hasPounced = false    // 一次飞行只被扑一次
 
-    /// 蝴蝶当前的屏幕 x 坐标（牛来追它用）
-    var currentX: CGFloat { window?.frame.midX ?? 0 }
-
-    static let size = NSSize(width: 110, height: 95)
+    override class var size: NSSize { NSSize(width: 110, height: 95) }
     private let cruiseSpeed: CGFloat = 65
     private let escapeSpeed: CGFloat = 190
 
-    nonisolated init() {}
-
     func flyAcross(fromLeft: Bool, groundY: CGFloat) {
-        guard let pet, pet.isVisible, !pet.isPeaceful, let petWindow = pet.window else { return }
-        ensureWindow()
-        guard let window else { return }
-        let vf = ScreenGeometry.visibleFrame(of: petWindow)
+        startCrossing(fromLeft: fromLeft, groundY: groundY, referenceWindow: pet?.window)
+    }
 
-        direction = fromLeft ? 1 : -1
-        facingLeft = !fromLeft
+    // MARK: - ScreenCrosser hook
+
+    override func canStart() -> Bool {
+        guard let pet, pet.isVisible, !pet.isPeaceful, pet.window != nil else { return false }
+        return true
+    }
+
+    override func onWillStart(fromLeft: Bool, groundY: CGFloat) {
         scheme = Self.schemes.randomElement() ?? Self.schemes[0]
         baseY = groundY + 95   // 牛来脑袋的高度，跳一跳够得着
         flyTime = 0
         escaping = false
         hasPounced = false
-        window.setFrameOrigin(NSPoint(
-            x: fromLeft ? vf.minX - Self.size.width : vf.maxX,
-            y: baseY
-        ))
-        flying = true
-        window.orderFrontRegardless()
-        ticker.start()
     }
 
-    private func tick(dt: CGFloat) {
-        guard flying, let window, let pet, let petWindow = pet.window else { return }
-        let vf = ScreenGeometry.visibleFrame(of: petWindow)
+    override func startOrigin(fromLeft: Bool, vf: NSRect, groundY: CGFloat) -> CGPoint {
+        CGPoint(x: fromLeft ? vf.minX - Self.size.width : vf.maxX, y: baseY)
+    }
 
+    override func updatePosition(dt: CGFloat, origin: inout CGPoint, vf: NSRect) {
         flyTime += dt
-        var origin = window.frame.origin
         origin.x += direction * (escaping ? escapeSpeed : cruiseSpeed) * dt
         origin.y = baseY + sin(flyTime * 3) * 16   // 蝴蝶式上下翻飞
         if escaping { baseY += 50 * dt }           // 逃走时往上爬升
-        window.setFrameOrigin(origin)
+    }
+
+    override func afterMove(vf: NSRect) {
+        guard let pet, let petWindow = pet.window, let origin = window?.frame.origin else { return }
 
         // 路过牛来附近：牛来注意到了，开始追
         if !escaping, pet.state != .chasing, abs(currentX - petWindow.frame.midX) < 340 {
@@ -110,18 +101,10 @@ final class ButterflyController: ObservableObject {
                 pet.pounceAtButterfly()
             }
         }
-
-        // 飞出屏幕，本次造访结束
-        if origin.x > vf.maxX + 10 || origin.x + Self.size.width < vf.minX - 10 {
-            flying = false
-            window.orderOut(nil)
-            ticker.stop()
-            pet.butterflyGone()
-        }
     }
 
-    func setVisible(_ visible: Bool) {
-        if !visible { window?.orderOut(nil) }
+    override func onDidExit() {
+        pet?.butterflyGone()
     }
 
     /// 预览/调试用：直接指定配色
@@ -129,13 +112,8 @@ final class ButterflyController: ObservableObject {
         self.scheme = scheme
     }
 
-    private func ensureWindow() {
-        guard window == nil else { return }
-        window = WindowFactory.makeFloatingWindow(
-            size: Self.size,
-            ignoresMouseEvents: true,   // 纯视觉，不挡点击
-            rootView: ButterflyView(controller: self)
-        )
+    override func makeContentView() -> AnyView {
+        AnyView(ButterflyView(controller: self))
     }
 }
 

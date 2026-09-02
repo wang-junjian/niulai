@@ -146,7 +146,7 @@ final class PetViewModel: ObservableObject {
             }
         case .chasing:
             // 小跑追蝴蝶：蝴蝶没了就收手
-            guard let butterfly, butterfly.flying else {
+            guard let butterfly, butterfly.running else {
                 butterflyGone()
                 break
             }
